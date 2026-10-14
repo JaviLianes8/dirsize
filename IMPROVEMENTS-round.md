@@ -7,9 +7,9 @@ Progress:
 - [x] Disk usage: `st_blocks` on POSIX, compressed and sparse aware allocation on Windows
 - [x] Streaming per-directory totals, top-N largest files and directories
 - [x] CLI (`dirsize PATH...`, `python -m dirsize`) with JSON output
-- [ ] Docs: README, CHANGELOG, docstrings, runnable README examples
-- [ ] (in progress: contract and scan tests written) Contracts, GNU du oracle (WSL), installed wheel e2e, mutation run
-- [ ] Gates: ruff format, ruff check, mypy --strict, pytest
+- [x] Docs: README, CHANGELOG, docstrings, runnable README examples
+- [x] Contracts, GNU du oracle (WSL), installed wheel e2e, mutation run
+- [x] Gates: ruff format, ruff check, mypy --strict, pytest
 - [ ] Independent review findings fixed
 - [ ] Pull request opened, guard clean
 
@@ -90,6 +90,23 @@ the oracle looks for `gnudu` first and accepts `du` only when it says it is GNU.
     (hard links, symlinks, junctions, compressed and sparse files, permission
     errors, cycles), a GNU du oracle on random trees in WSL, an installed wheel e2e
     driving the CLI, and a mutation run over the walker and size code.
+
+## Results
+
+- GNU du 9.7 (`gnudu` in WSL Ubuntu) agrees with `scan` and `iter_dirs` on 12
+  seeded random trees with hard links, symlinks to files and folders and sparse
+  files: `-sb`, `-sB1`, `-b`, `-B1` per directory, `-l` and `-L`. Matching it
+  showed that du gives folders, devices and pipes no apparent size, and that
+  with `-L` every file is deduplicated by device and inode, not only files
+  with several hard links. Both rules are now implemented.
+- Mutation run (43 hand-written mutants over the walker, platform, types, API
+  and CLI, no bytecode, caches purged, 180 s per mutant, baseline green before
+  and after): 40 killed on Windows. The two `include_dirs` mutants survive only
+  where folders take no blocks (NTFS here, tmpfs); they are killed on ext4 in
+  WSL. The last one, skipping non-regular files before asking Windows for the
+  compressed size, is equivalent: Windows reports 0 for a folder anyway.
+- The installed wheel test builds, installs into a fresh venv and drives the
+  `dirsize` command and the API (`DIRSIZE_E2E=1`).
 
 ## Out of scope
 
