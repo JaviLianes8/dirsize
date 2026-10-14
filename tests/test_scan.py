@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 from helpers import hardlink, write
 
-import dirsize._walk as walk_module
 from dirsize import Usage, iter_dirs, scan
 
 
@@ -90,7 +89,7 @@ def test_one_filesystem_skips_directories_on_another_device(
             return os.stat_result(fields)
         return info
 
-    monkeypatch.setattr(walk_module.os, "stat", fake_stat)
+    monkeypatch.setattr(os, "stat", fake_stat)
     assert scan(tmp_path, one_filesystem=True).apparent_bytes == 10
     assert scan(tmp_path).apparent_bytes == 40
 

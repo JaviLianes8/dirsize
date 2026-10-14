@@ -59,6 +59,7 @@ def unreadable(path: Path) -> Iterator[None]:
             ["icacls", str(path), "/deny", f"{user}:(RD)"], check=True, capture_output=True
         )
         try:
+            _require_denied(path)
             yield
         finally:
             subprocess.run(
@@ -70,6 +71,16 @@ def unreadable(path: Path) -> Iterator[None]:
         mode = path.stat().st_mode
         path.chmod(0)
         try:
+            _require_denied(path)
             yield
         finally:
             path.chmod(mode)
+
+
+def _require_denied(path: Path) -> None:
+    # An elevated account holding the backup privilege still lists the folder.
+    try:
+        os.listdir(path)
+    except PermissionError:
+        return
+    pytest.skip("this account can read a folder it was denied")
