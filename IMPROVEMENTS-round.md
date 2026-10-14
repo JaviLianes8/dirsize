@@ -107,12 +107,15 @@ the oracle uses `du` only when it says it is GNU, and `gnudu` otherwise.
   showed that du gives folders, devices and pipes no apparent size, and that
   with `-L` every file is deduplicated by device and inode, not only files
   with several hard links. Both rules are now implemented.
-- Mutation run (43 hand-written mutants over the walker, platform, types, API
-  and CLI, no bytecode, caches purged, 180 s per mutant, baseline green before
-  and after): 40 killed on Windows. The two `include_dirs` mutants survive only
-  where folders take no blocks (NTFS here, tmpfs); they are killed on ext4 in
-  WSL. The last one, skipping non-regular files before asking Windows for the
-  compressed size, is equivalent: Windows reports 0 for a folder anyway.
+- Mutation run after review (50 hand-written mutants over the walker,
+  platform, types, API and CLI, no bytecode, caches purged, 180 s per mutant,
+  baseline green before and after): 47 killed on Windows. The two
+  `include_dirs` mutants survive only where folders take no blocks (NTFS,
+  tmpfs) and are killed on ext4 in WSL. The last one, skipping non-regular
+  files before asking Windows for the allocation, is equivalent: a folder
+  reports 0 there anyway.
+- The oracle now also builds dangling links and links to ancestors, and checks
+  the CLI with repeated and nested paths byte for byte against du.
 - The installed wheel test builds, installs into a fresh venv and drives the
   `dirsize` command and the API (`DIRSIZE_E2E=1`).
 
