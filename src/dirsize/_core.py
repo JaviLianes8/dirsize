@@ -42,7 +42,7 @@ def scan(
     Symlinks and Windows junctions below ``path`` are counted as links and not
     entered unless ``follow_symlinks``; ``path`` itself is always resolved.
     ``one_filesystem`` skips directories on another device, like ``du -x``.
-    ``include_dirs`` adds each directory's own size, as ``du`` does.
+    ``include_dirs`` adds the blocks each directory takes, as ``du`` does.
     Errors are collected in :attr:`Usage.errors`; ``on_error="raise"`` stops at
     the first one and a callable also sees each :class:`OSError` as it happens.
     """

@@ -59,7 +59,7 @@ from dirsize import scan
 scan("my_project", follow_symlinks=True)  # enter symlinked folders and junctions
 scan("my_project", one_filesystem=True)  # skip folders on another device, like du -x
 scan("my_project", count_links=True)  # count every hard link, like du -l
-scan("my_project", include_dirs=True)  # add each folder's own entry size, like du
+scan("my_project", include_dirs=True)  # add the blocks folders take, like du
 scan("my_project", on_error="raise")  # stop at the first unreadable path
 ```
 
@@ -104,6 +104,8 @@ same tool runs as `python -m dirsize`.
 - **Disk usage.** On Linux and macOS it is `st_blocks * 512`. On Windows it is
   the compressed or sparse allocation reported by `GetCompressedFileSizeW`,
   rounded up to the cluster size of the volume; links and folders take 0 there.
+- **Apparent size.** Only regular files and symlinks have one, as in GNU du;
+  folders, devices and pipes add 0.
 - **Errors.** Each one becomes a `ScanError` with the path, a kind
   (`permission`, `missing`, `cycle`, `other`) and the system message.
 

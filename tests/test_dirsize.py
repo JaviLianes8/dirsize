@@ -86,7 +86,8 @@ def test_symlinked_directory_is_not_descended_by_default(tmp_path: Path) -> None
         os.symlink(real, link, target_is_directory=True)
     except (OSError, NotImplementedError, AttributeError):
         pytest.skip("this filesystem cannot create symlinks")
-    assert dir_size(tmp_path) == 50
+    # The link itself counts with its own size, like du; its target is not entered.
+    assert dir_size(tmp_path) == 50 + os.lstat(link).st_size
 
 
 def test_follow_symlinks_survives_a_loop(tmp_path: Path) -> None:

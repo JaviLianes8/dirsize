@@ -11,7 +11,7 @@ import pytest
 from helpers import write
 
 from dirsize import scan
-from dirsize._platform import _round_up, is_link, posix_disk_bytes
+from dirsize._platform import _round_up, apparent_bytes, is_link, posix_disk_bytes
 
 windows_only = pytest.mark.skipif(sys.platform != "win32", reason="NTFS allocation")
 
@@ -34,6 +34,17 @@ def test_posix_disk_bytes_are_512_byte_blocks() -> None:
 
 def test_posix_disk_bytes_fall_back_to_the_size() -> None:
     assert posix_disk_bytes("f", _stat(1234)) == 1234
+
+
+def test_apparent_bytes_only_for_files_and_symlinks() -> None:
+    def info(mode: int, size: int) -> os.stat_result:
+        return cast(os.stat_result, SimpleNamespace(st_mode=mode, st_size=size))
+
+    assert apparent_bytes(info(0o100644, 7)) == 7
+    assert apparent_bytes(info(0o120777, 12)) == 12
+    assert apparent_bytes(info(0o040755, 4096)) == 0
+    assert apparent_bytes(info(0o010644, 5)) == 0
+    assert apparent_bytes(info(0o100644, -1)) == 0
 
 
 def test_round_up_to_whole_units() -> None:

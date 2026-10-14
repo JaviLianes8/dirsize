@@ -8,7 +8,7 @@ from collections.abc import Generator, Iterator
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from ._platform import disk_bytes, is_link
+from ._platform import apparent_bytes, disk_bytes, is_link
 from ._types import DirUsage, ErrorHandler, FileUsage, cycle_error
 
 Key = tuple[int, int]
@@ -65,16 +65,18 @@ class _State:
 
     def file_bytes(self, path: str, info: os.stat_result) -> tuple[int, int]:
         key = (info.st_dev, info.st_ino)
-        if not self.options.count_links and info.st_nlink > 1 and info.st_ino != 0:
+        # Following links can reach one file by several paths even without hard links.
+        shared = info.st_nlink > 1 or self.options.follow_symlinks
+        if not self.options.count_links and shared and info.st_ino != 0:
             if key in self.seen_files:
                 return 0, 0
             self.seen_files.add(key)
-        return info.st_size, disk_bytes(path, info)
+        return apparent_bytes(info), disk_bytes(path, info)
 
     def own_bytes(self, path: str, info: os.stat_result) -> tuple[int, int]:
         if not self.options.include_dirs:
             return 0, 0
-        return info.st_size, disk_bytes(path, info)
+        return apparent_bytes(info), disk_bytes(path, info)
 
 
 def _lookup(path: str, follow: bool, state: _State) -> tuple[os.stat_result, bool] | None:

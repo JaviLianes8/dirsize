@@ -66,12 +66,15 @@ def test_hard_link_bytes_land_in_one_directory_only(tmp_path: Path) -> None:
     assert sizes[tmp_path.name] == 64
 
 
-def test_include_dirs_adds_each_directory_entry(tmp_path: Path) -> None:
+def test_include_dirs_adds_directory_blocks_but_no_apparent_bytes(tmp_path: Path) -> None:
     _tree(tmp_path)
-    expected = sum(
-        os.stat(p).st_size for p in (tmp_path, tmp_path / "sub", tmp_path / "sub" / "deep")
+    plain, with_dirs = scan(tmp_path), scan(tmp_path, include_dirs=True)
+    assert with_dirs.apparent_bytes == plain.apparent_bytes == 40
+    blocks = sum(
+        getattr(os.stat(p), "st_blocks", 0) * 512
+        for p in (tmp_path, tmp_path / "sub", tmp_path / "sub" / "deep")
     )
-    assert scan(tmp_path, include_dirs=True).apparent_bytes == 40 + expected
+    assert with_dirs.disk_bytes == plain.disk_bytes + blocks
 
 
 def test_one_filesystem_skips_directories_on_another_device(

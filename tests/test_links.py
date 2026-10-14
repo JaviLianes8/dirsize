@@ -89,3 +89,12 @@ def test_broken_symlink_is_an_error_when_following(tmp_path: Path) -> None:
     symlink(tmp_path / "dangling", tmp_path / "missing")
     usage = scan(tmp_path, follow_symlinks=True)
     assert [e.kind for e in usage.errors] == ["missing"] and usage.files == 0
+
+
+def test_two_followed_links_to_one_file_count_it_once(tmp_path: Path) -> None:
+    target = write(tmp_path / "data" / "f.bin", b"f" * 40)
+    symlink(tmp_path / "view" / "a", target)
+    symlink(tmp_path / "view" / "b", target)
+    usage = scan(tmp_path / "view", follow_symlinks=True)
+    assert (usage.apparent_bytes, usage.files) == (40, 2)
+    assert scan(tmp_path / "view", follow_symlinks=True, count_links=True).apparent_bytes == 80

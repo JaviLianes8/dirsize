@@ -21,6 +21,13 @@ def is_link(info: os.stat_result) -> bool:
     return bool(attributes & _REPARSE_POINT) and bool(tag & _NAME_SURROGATE)
 
 
+def apparent_bytes(info: os.stat_result) -> int:
+    """``st_size`` of a regular file or symlink; 0 for anything else, as GNU du counts it."""
+    if stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode):
+        return max(0, info.st_size)
+    return 0
+
+
 def posix_disk_bytes(path: str, info: os.stat_result) -> int:
     """Allocated bytes from ``st_blocks``, which counts 512-byte units."""
     blocks = getattr(info, "st_blocks", None)
