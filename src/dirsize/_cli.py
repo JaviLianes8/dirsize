@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from collections.abc import Sequence
 from dataclasses import asdict
@@ -16,14 +17,17 @@ _UNITS = ("B", "K", "M", "G", "T", "P", "E")
 
 
 def human(size: int) -> str:
-    """Format ``size`` with binary units the way ``du -h`` does: one decimal below 10."""
-    value = float(size)
-    for unit in _UNITS:
-        if value < 1024 or unit == _UNITS[-1]:
-            if unit == "B":
-                return f"{size}B"
-            text = f"{value:.1f}" if value < 10 else f"{value:.0f}"
-            return f"{text}{unit}"
+    """Format ``size`` in binary units like ``du -h``: rounded up, one decimal below 10."""
+    if size < 1024:
+        return f"{size}B"
+    value = size / 1024
+    for unit in _UNITS[1:]:
+        tenths = math.ceil(value * 10)
+        if tenths < 100:
+            return f"{tenths / 10:.1f}{unit}"
+        whole = math.ceil(value)
+        if whole < 1024 or unit == _UNITS[-1]:
+            return f"{whole}{unit}"
         value /= 1024
     raise AssertionError("unreachable")
 
