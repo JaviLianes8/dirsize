@@ -4,7 +4,20 @@ import dirsize
 
 # The public API. Add every exported name here as the library grows; this list is the
 # contract and the test below fails if the module and this list disagree.
-PUBLIC_API: list[str] = ["OnError", "dir_size", "file_count"]
+PUBLIC_API: list[str] = [
+    "DirUsage",
+    "ErrorKind",
+    "FileUsage",
+    "Measure",
+    "OnError",
+    "ScanError",
+    "Usage",
+    "dir_size",
+    "file_count",
+    "iter_dirs",
+    "largest",
+    "scan",
+]
 
 
 def test_all_lists_exactly_the_public_api() -> None:
@@ -24,3 +37,12 @@ def test_version_is_a_three_part_string() -> None:
 
 def test_the_package_ships_type_information() -> None:
     assert importlib.resources.files("dirsize").joinpath("py.typed").is_file()
+
+
+def test_results_are_frozen() -> None:
+    usage = dirsize.Usage("p", 1, 2, 3, 4, 5)
+    try:
+        usage.files = 9  # type: ignore[misc]
+    except AttributeError:
+        return
+    raise AssertionError("Usage must be immutable")
