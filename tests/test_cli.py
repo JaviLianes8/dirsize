@@ -65,6 +65,17 @@ def test_a_path_given_twice_is_printed_once(tmp_path: Path) -> None:
     _tree(tmp_path)
     _, out = _run("-s", str(tmp_path), str(tmp_path))
     assert len(_lines(out)) == 1
+    _, listing = _run(str(tmp_path), str(tmp_path))
+    assert [path for _, path in _lines(listing)] == [str(tmp_path / "sub"), str(tmp_path)]
+
+
+def test_top_honours_count_links(tmp_path: Path) -> None:
+    original = write(tmp_path / "a.bin", b"a" * 300)
+    hardlink(tmp_path / "b.bin", original)
+    _, plain = _run("--top", "2", "-A", str(tmp_path))
+    _, counted = _run("--top", "2", "-A", "-l", str(tmp_path))
+    assert sorted(size for size, _ in _lines(plain)) == ["0", "300"]
+    assert [size for size, _ in _lines(counted)] == ["300", "300"]
 
 
 def test_dereference_flag_follows_links(tmp_path: Path) -> None:

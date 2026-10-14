@@ -121,3 +121,27 @@ def test_broken_symlink_is_an_error_when_following_like_du_l(tmp_path: Path) -> 
     assert [e.kind for e in usage.errors] == ["missing"] and usage.files == 0
     (root,) = iter_dirs(tmp_path, follow_symlinks=True)
     assert root.errors == 1
+
+
+def test_same_directory_met_twice_without_a_loop_is_skipped_silently(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Two bind mounts of one folder: the second is skipped, it is not a cycle.
+    write(tmp_path / "a" / "f.bin", b"f" * 30)
+    write(tmp_path / "b" / "g.bin", b"g" * 7)
+    first, second = os.fspath(tmp_path / "a"), os.fspath(tmp_path / "b")
+    real_stat = os.stat
+
+    def fake_stat(path: str, *, follow_symlinks: bool = True) -> os.stat_result:
+        info = real_stat(path, follow_symlinks=follow_symlinks)
+        if os.fspath(path) == second:
+            fields = list(info)
+            original = real_stat(first)
+            fields[1], fields[2] = original.st_ino, original.st_dev
+            return os.stat_result(fields)
+        return info
+
+    monkeypatch.setattr(os, "stat", fake_stat)
+    usage = scan(tmp_path)
+    assert usage.ok and usage.dirs == 1
+    assert usage.apparent_bytes in (30, 7)
