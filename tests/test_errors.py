@@ -137,3 +137,21 @@ def test_nested_errors_add_up_to_the_root(tmp_path: Path, monkeypatch: pytest.Mo
     monkeypatch.setattr(os, "scandir", guarded)
     errors = {Path(d.path).name: d.errors for d in iter_dirs(tmp_path)}
     assert errors == {"b": 1, "a": 1, tmp_path.name: 1}
+
+
+def test_unreadable_root_reports_its_own_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = os.fspath(tmp_path)
+    real_scandir = os.scandir
+
+    def guarded(path: str) -> object:
+        if os.fspath(path) == root:
+            raise PermissionError(errno.EACCES, "denied", root)
+        return real_scandir(path)
+
+    monkeypatch.setattr(os, "scandir", guarded)
+    (only,) = iter_dirs(tmp_path)
+    assert (only.path, only.errors, only.files, only.depth) == (root, 1, 0, 0)
+    usage = scan(tmp_path)
+    assert usage.measured and [e.kind for e in usage.errors] == ["permission"]

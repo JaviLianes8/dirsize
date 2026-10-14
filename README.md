@@ -63,8 +63,8 @@ scan("my_project", include_dirs=True)  # add the blocks folders take, like du
 scan("my_project", on_error="raise")  # stop at the first unreadable path
 ```
 
-`iter_dirs` and `largest` take the same options. `on_error` may also be a
-callable that receives each `OSError` as it happens.
+`iter_dirs` takes the same options; `largest` takes all but `include_dirs`.
+`on_error` may also be a callable that receives each `OSError` as it happens.
 
 ### The simple calls
 
@@ -88,8 +88,10 @@ Without options it prints the disk usage in bytes of every directory, children
 first, like `du`. `-s` prints one total per path, `-A` uses apparent sizes, `-h`
 prints sizes such as `1.5K` or `20M` (rounded up, as `du -h` does), `--top N`
 lists the N largest files, and `--json` prints one document with the totals and
-errors of each path. Errors go to standard error and the exit status is 1. The
-same tool runs as `python -m dirsize`.
+errors of each path; these three are exclusive. Like `du`, a hard link or a
+folder shared by several paths counts only under the first. Errors go to
+standard error and the exit status is 1. The same tool runs as
+`python -m dirsize`.
 
 ## What is counted
 
@@ -99,11 +101,14 @@ same tool runs as `python -m dirsize`.
   point that names another path, counts as a link entry of its own size and is
   not entered. With `follow_symlinks=True` its target is measured instead. The
   root path is always resolved.
-- **Cycles.** A folder is entered at most once per device and file id. A
-  followed link that leads back to a parent is reported with kind `cycle`.
+- **Cycles.** A folder is entered at most once per device and file id. Like
+  `du -L`, a followed link back to a parent is simply not entered again; a
+  physical loop (a bind mount or a hard-linked folder) is reported as `cycle`.
+  When following links, a dangling one is a `missing` error, as in `du -L`.
 - **Disk usage.** On Linux and macOS it is `st_blocks * 512`. On Windows it is
-  the compressed or sparse allocation reported by `GetCompressedFileSizeW`,
-  rounded up to the cluster size of the volume; links and folders take 0 there.
+  the allocation NTFS reports for the file (`AllocationSize`), which already
+  accounts for compression, sparse ranges and tiny files kept inside the file
+  table; links and folders take 0 there.
 - **Apparent size.** Only regular files and symlinks have one, as in GNU du;
   folders, devices and pipes add 0.
 - **Errors.** Each one becomes a `ScanError` with the path, a kind
@@ -119,7 +124,7 @@ The standard library has no single call for the size of a directory tree. The
 common recipe, summing `os.path.getsize` over `os.walk`, double counts hard
 links, ignores what sparse and compressed files really take, walks into
 junctions on Windows and can loop forever on a link cycle. `dirsize` is the
-`du` primitive as typed functions: `os.scandir` for speed, `(st_dev, st_ino)`
+`du` primitive as typed functions: one `os.scandir` walk, `(st_dev, st_ino)`
 for hard links and cycles, and every error kept next to the result. No
 dependencies, `mypy --strict` clean.
 

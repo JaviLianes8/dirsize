@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import pytest
 from helpers import junction, symlink, write
 
 from dirsize import dir_size, file_count, iter_dirs, scan
@@ -43,23 +44,6 @@ def test_junction_to_an_ancestor_does_not_recurse(tmp_path: Path) -> None:
     assert [Path(d.path).name for d in iter_dirs(tmp_path)] == ["inner", tmp_path.name]
 
 
-def test_followed_junction_loop_is_reported_as_a_cycle(tmp_path: Path) -> None:
-    write(tmp_path / "inner" / "f.bin", b"f" * 30)
-    junction(tmp_path / "inner" / "loop", tmp_path)
-    usage = scan(tmp_path, follow_symlinks=True)
-    assert usage.apparent_bytes == 30
-    assert [e.kind for e in usage.errors] == ["cycle"]
-    assert usage.errors[0].path == os.fspath(tmp_path / "inner" / "loop")
-
-
-def test_followed_symlink_loop_is_reported_as_a_cycle(tmp_path: Path) -> None:
-    write(tmp_path / "inner" / "f.bin", b"f" * 30)
-    symlink(tmp_path / "inner" / "loop", tmp_path)
-    usage = scan(tmp_path, follow_symlinks=True)
-    assert usage.apparent_bytes == 30
-    assert [e.kind for e in usage.errors] == ["cycle"]
-
-
 def test_dir_size_keeps_skipping_loops_silently(tmp_path: Path) -> None:
     write(tmp_path / "inner" / "f.bin", b"f" * 30)
     symlink(tmp_path / "inner" / "loop", tmp_path)
@@ -87,14 +71,6 @@ def test_broken_symlink_counts_as_a_link_without_following(tmp_path: Path) -> No
     assert usage.files == 1 and usage.links == 1 and usage.ok
 
 
-def test_broken_symlink_is_an_error_when_following(tmp_path: Path) -> None:
-    symlink(tmp_path / "dangling", tmp_path / "missing")
-    usage = scan(tmp_path, follow_symlinks=True)
-    assert [e.kind for e in usage.errors] == ["missing"] and usage.files == 0
-    (root,) = iter_dirs(tmp_path, follow_symlinks=True)
-    assert root.errors == 1
-
-
 def test_two_followed_links_to_one_file_count_it_once(tmp_path: Path) -> None:
     target = write(tmp_path / "data" / "f.bin", b"f" * 40)
     symlink(tmp_path / "view" / "a", target)
@@ -102,3 +78,46 @@ def test_two_followed_links_to_one_file_count_it_once(tmp_path: Path) -> None:
     usage = scan(tmp_path / "view", follow_symlinks=True)
     assert (usage.apparent_bytes, usage.files) == (40, 2)
     assert scan(tmp_path / "view", follow_symlinks=True, count_links=True).apparent_bytes == 80
+
+
+def test_followed_junction_loop_is_skipped_silently_like_du_l(tmp_path: Path) -> None:
+    write(tmp_path / "inner" / "f.bin", b"f" * 30)
+    junction(tmp_path / "inner" / "loop", tmp_path)
+    usage = scan(tmp_path, follow_symlinks=True)
+    assert (usage.apparent_bytes, usage.dirs) == (30, 1) and usage.ok
+
+
+def test_followed_symlink_loop_is_skipped_silently_like_du_l(tmp_path: Path) -> None:
+    write(tmp_path / "inner" / "f.bin", b"f" * 30)
+    symlink(tmp_path / "inner" / "loop", tmp_path)
+    usage = scan(tmp_path, follow_symlinks=True)
+    assert (usage.apparent_bytes, usage.dirs) == (30, 1) and usage.ok
+
+
+def test_physical_cycle_is_reported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # A bind mount or a hard-linked directory makes a child the same directory as its parent.
+    write(tmp_path / "inner" / "f.bin", b"f" * 30)
+    looped = os.fspath(tmp_path / "inner")
+    root_info = os.stat(tmp_path)
+    real_stat = os.stat
+
+    def fake_stat(path: str, *, follow_symlinks: bool = True) -> os.stat_result:
+        info = real_stat(path, follow_symlinks=follow_symlinks)
+        if os.fspath(path) == looped:
+            fields = list(info)
+            fields[1], fields[2] = root_info.st_ino, root_info.st_dev
+            return os.stat_result(fields)
+        return info
+
+    monkeypatch.setattr(os, "stat", fake_stat)
+    usage = scan(tmp_path)
+    assert [(e.kind, e.path) for e in usage.errors] == [("cycle", looped)]
+    assert dir_size(tmp_path) == 0
+
+
+def test_broken_symlink_is_an_error_when_following_like_du_l(tmp_path: Path) -> None:
+    symlink(tmp_path / "dangling", tmp_path / "missing")
+    usage = scan(tmp_path, follow_symlinks=True)
+    assert [e.kind for e in usage.errors] == ["missing"] and usage.files == 0
+    (root,) = iter_dirs(tmp_path, follow_symlinks=True)
+    assert root.errors == 1

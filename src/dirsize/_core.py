@@ -16,9 +16,10 @@ from ._types import (
     PathLike,
     ScanError,
     Usage,
+    WalkOptions,
     as_handler,
 )
-from ._walk import WalkOptions, walk
+from ._walk import Seen, walk
 
 
 def _items(path: PathLike, handle: ErrorHandler, **options: bool) -> Iterator[FileUsage | DirUsage]:
@@ -37,7 +38,7 @@ def scan(
     """Measure the tree at ``path`` and return its totals with every error met.
 
     ``disk_bytes`` is the space allocated (``st_blocks`` on POSIX, compressed or
-    sparse aware cluster allocation on Windows); ``apparent_bytes`` is the sum of
+    sparse aware NTFS allocation on Windows); ``apparent_bytes`` is the sum of
     ``st_size``. A file with several hard links counts once unless ``count_links``.
     Symlinks and Windows junctions below ``path`` are counted as links and not
     entered unless ``follow_symlinks``; ``path`` itself is always resolved.
@@ -46,7 +47,12 @@ def scan(
     Errors are collected in :attr:`Usage.errors`; ``on_error="raise"`` stops at
     the first one and a callable also sees each :class:`OSError` as it happens.
     """
-    handle = as_handler(on_error)
+    options = WalkOptions(follow_symlinks, one_filesystem, count_links, include_dirs)
+    return measure(path, options, as_handler(on_error), Seen())
+
+
+def measure(path: PathLike, options: WalkOptions, handle: ErrorHandler, seen: Seen) -> Usage:
+    """Run :func:`scan` with a ``seen`` set shared with other roots (the CLI's arguments)."""
     errors: list[ScanError] = []
 
     def collect(error: OSError) -> None:
@@ -54,14 +60,7 @@ def scan(
         handle(error)
 
     total: DirUsage | None = None
-    for item in _items(
-        path,
-        collect,
-        follow_symlinks=follow_symlinks,
-        one_filesystem=one_filesystem,
-        count_links=count_links,
-        include_dirs=include_dirs,
-    ):
+    for item in walk(os.fspath(path), options, collect, seen):
         if isinstance(item, DirUsage) and item.depth == 0:
             total = item
     name = os.fspath(path)
@@ -82,8 +81,8 @@ def iter_dirs(
 ) -> Iterator[DirUsage]:
     """Yield a :class:`DirUsage` for every directory, children before their parent.
 
-    The root comes last. Results stream while the walk goes on, so memory stays
-    bounded by the depth of the tree and the set of hard-linked files seen.
+    The root comes last. Results stream while the walk goes on; memory holds the
+    walk stack and the identities of directories and hard-linked files seen.
     Options mean what they mean in :func:`scan`.
     """
     items = _items(
@@ -105,12 +104,14 @@ def largest(
     kind: Literal["file", "dir"] = "file",
     follow_symlinks: bool = False,
     one_filesystem: bool = False,
+    count_links: bool = False,
     on_error: OnError = "ignore",
 ) -> list[FileUsage] | list[DirUsage]:
     """Return the ``n`` largest files (or directories), biggest first.
 
     Ties keep walk order. ``by`` picks ``"disk"`` or ``"apparent"`` bytes. A
-    directory's size includes everything below it. Only ``n`` items are held.
+    directory's size includes everything below it. Only ``n`` items are held. A
+    second name of a hard-linked file weighs 0 unless ``count_links``.
     """
     if n < 0:
         raise ValueError(f"n must be zero or more, got {n}")
@@ -127,6 +128,7 @@ def largest(
                 as_handler(on_error),
                 follow_symlinks=follow_symlinks,
                 one_filesystem=one_filesystem,
+                count_links=count_links,
             )
         )
         if isinstance(item, want)

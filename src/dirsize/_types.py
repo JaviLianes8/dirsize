@@ -20,7 +20,8 @@ class ScanError:
     """One path that could not be measured, and why.
 
     ``kind`` is ``"permission"``, ``"missing"`` (vanished or not a directory),
-    ``"cycle"`` (a followed link leading back to an ancestor) or ``"other"``.
+    ``"cycle"`` (a directory that contains itself, without following links) or
+    ``"other"``.
     """
 
     path: str
@@ -87,6 +88,17 @@ class Usage:
     def ok(self) -> bool:
         """True when the whole tree was measured without a single error."""
         return not self.errors
+
+
+@dataclass(frozen=True)
+class WalkOptions:
+    """Internal walk switches; the public functions expose them as keyword arguments."""
+
+    follow_symlinks: bool = False
+    one_filesystem: bool = False
+    count_links: bool = False
+    include_dirs: bool = False
+    report_cycles: bool = True
 
 
 def as_handler(on_error: OnError) -> ErrorHandler:

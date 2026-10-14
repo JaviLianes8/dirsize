@@ -34,52 +34,54 @@ def posix_disk_bytes(path: str, info: os.stat_result) -> int:
     return info.st_size if blocks is None else blocks * 512
 
 
-def _round_up(size: int, unit: int) -> int:
-    return -(-size // unit) * unit if unit > 0 else size
-
-
 if sys.platform == "win32":
     import ctypes
     from ctypes import wintypes
 
-    _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    _compressed_size = _kernel32.GetCompressedFileSizeW
-    _compressed_size.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(wintypes.DWORD)]
-    _compressed_size.restype = wintypes.DWORD
-    _volume_path = _kernel32.GetVolumePathNameW
-    _volume_path.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
-    _volume_path.restype = wintypes.BOOL
-    _free_space = _kernel32.GetDiskFreeSpaceW
-    _free_space.argtypes = [wintypes.LPCWSTR] + [ctypes.POINTER(wintypes.DWORD)] * 4
-    _free_space.restype = wintypes.BOOL
-    _INVALID = 0xFFFFFFFF
-    _clusters: dict[int, int] = {}
+    class _StandardInfo(ctypes.Structure):
+        _fields_ = [
+            ("AllocationSize", ctypes.c_longlong),
+            ("EndOfFile", ctypes.c_longlong),
+            ("NumberOfLinks", wintypes.DWORD),
+            ("DeletePending", wintypes.BOOLEAN),
+            ("Directory", wintypes.BOOLEAN),
+        ]
 
-    def _cluster_size(path: str, device: int) -> int:
-        if device in _clusters:
-            return _clusters[device]
-        buffer = ctypes.create_unicode_buffer(32768)
-        size = 0
-        if _volume_path(path, buffer, len(buffer)):
-            sectors, per_sector, free, total = (wintypes.DWORD() for _ in range(4))
-            if _free_space(buffer.value, sectors, per_sector, free, total):
-                size = sectors.value * per_sector.value
-        _clusters[device] = size
-        return size
+    _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    _open = _kernel32.CreateFileW
+    _open.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p]
+    _open.argtypes += [wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+    _open.restype = wintypes.HANDLE
+    _query = _kernel32.GetFileInformationByHandleEx
+    _query.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+    _query.restype = wintypes.BOOL
+    _close = _kernel32.CloseHandle
+    _close.argtypes = [wintypes.HANDLE]
+    _INVALID_HANDLE = wintypes.HANDLE(-1).value
+    _READ_ATTRIBUTES, _SHARE_ALL, _OPEN_EXISTING = 0x80, 0x7, 3
+    _BACKUP_SEMANTICS, _FILE_STANDARD_INFO = 0x02000000, 1
 
     def windows_disk_bytes(path: str, info: os.stat_result) -> int:
-        """Compressed or sparse allocation from ``GetCompressedFileSizeW``, in whole clusters.
+        """``AllocationSize`` from ``FILE_STANDARD_INFO``: compressed and sparse aware.
 
-        A link or directory reports 0: its data lives in the file system's own tables.
+        Opening for attributes only never reads data. A link or directory reports 0:
+        its data lives in the file system's own tables. On failure, the plain size.
         """
         if not stat.S_ISREG(info.st_mode) or is_link(info):
             return 0
-        high = wintypes.DWORD(0)
-        ctypes.set_last_error(0)
-        low = _compressed_size(path, ctypes.byref(high))
-        if low == _INVALID and ctypes.get_last_error() != 0:
+        handle = _open(
+            path, _READ_ATTRIBUTES, _SHARE_ALL, None, _OPEN_EXISTING, _BACKUP_SEMANTICS, None
+        )
+        if handle is None or handle == _INVALID_HANDLE:
             return info.st_size
-        return _round_up((high.value << 32) | low, _cluster_size(path, info.st_dev))
+        try:
+            data = _StandardInfo()
+            if not _query(handle, _FILE_STANDARD_INFO, ctypes.byref(data), ctypes.sizeof(data)):
+                return info.st_size
+            allocated: int = data.AllocationSize
+            return max(0, allocated)
+        finally:
+            _close(handle)
 
     disk_bytes: Callable[[str, os.stat_result], int] = windows_disk_bytes
 else:

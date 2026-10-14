@@ -10,7 +10,7 @@ Progress:
 - [x] Docs: README, CHANGELOG, docstrings, runnable README examples
 - [x] Contracts, GNU du oracle (WSL), installed wheel e2e, mutation run
 - [x] Gates: ruff format, ruff check, mypy --strict, pytest
-- [ ] Independent review findings fixed
+- [x] Independent review findings fixed
 - [x] Pull request opened (#2), guard clean
 
 Every item is additive. `dir_size`, `file_count` and `OnError` keep their names,
@@ -49,12 +49,17 @@ symlinks. Gaps found while reading `_core.py`:
 - `GetCompressedFileSizeW`: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getcompressedfilesizew
   (returns the compressed or sparse allocated size; for other files the plain
   size; follows a symbolic link to its target).
+- `FILE_STANDARD_INFO`: https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_standard_info
+  (`AllocationSize` is the space allocated for the file).
+- GNU du source: https://raw.githubusercontent.com/coreutils/coreutils/master/src/du.c
+  (apparent size only for types with a usable `st_size`; every file is hashed
+  for hard-link dedupe when dereferencing all links).
 - Reparse point tags: https://learn.microsoft.com/en-us/windows/win32/fileio/reparse-point-tags
   (`IsReparseTagNameSurrogate`: the bit that marks a tag as naming another entity,
   set for symlinks and mount points; cloud and dedup tags do not set it).
 
 GNU du runs only as a test oracle. In this WSL image `du` is the uutils port, so
-the oracle looks for `gnudu` first and accepts `du` only when it says it is GNU.
+the oracle uses `du` only when it says it is GNU, and `gnudu` otherwise.
 
 ## Ranked improvements
 
@@ -63,12 +68,15 @@ the oracle looks for `gnudu` first and accepts `du` only when it says it is GNU.
    are counted as the link itself and never entered unless `follow_symlinks=True`.
    This fixes the junction loop and double count.
 2. **Cycles always safe.** Every directory is entered at most once per
-   `(st_dev, st_ino)`; re-entering an ancestor is reported as a `cycle` error
-   (GNU du warns about a circular directory structure) instead of recursing.
+   `(st_dev, st_ino)`; in a physical walk re-entering an ancestor is reported as
+   a `cycle` error, as GNU du warns about a circular directory structure; with
+   `-L` du skips such a loop silently, and so does dirsize.
 3. **Disk usage next to apparent size.** `Usage.disk_bytes`: `st_blocks * 512` on
-   POSIX; on Windows `GetCompressedFileSizeW` rounded up to the cluster size of
-   the volume, so compressed and sparse files show what they really take. When the
-   platform cannot tell, it falls back to the apparent size.
+   POSIX; on Windows the `AllocationSize` NTFS reports in `FILE_STANDARD_INFO`,
+   so compressed and sparse files show what they really take. (The first version
+   used `GetCompressedFileSizeW` rounded up to the cluster size; review showed
+   it counts a whole cluster for tiny files kept inside the file table.) When
+   the platform cannot tell, it falls back to the apparent size.
 4. **Typed results with errors kept.** `scan(path) -> Usage` (apparent bytes, disk
    bytes, files, directories, links, errors). Errors become `ScanError(path, kind,
    message)` (`permission`, `missing`, `cycle`, `other`) and the scan goes on;
@@ -107,6 +115,28 @@ the oracle looks for `gnudu` first and accepts `du` only when it says it is GNU.
   compressed size, is equivalent: Windows reports 0 for a folder anyway.
 - The installed wheel test builds, installs into a fresh venv and drives the
   `dirsize` command and the API (`DIRSIZE_E2E=1`).
+
+## Independent review
+
+Twelve findings, fixed with regression tests unless noted:
+
+- With `-L`, a link back to a parent is skipped silently, as du does; only a
+  physical loop is a `cycle` error.
+- The claim that `du -L` counts a dangling link silently did not hold: GNU du
+  9.7 prints "cannot access" and exits 1. The oracle now builds dangling links
+  and loops, and checks error counts as well as sizes.
+- The CLI shares one set of seen files and folders across its paths, so a hard
+  link or folder counts once and a repeated path prints once, like du. An
+  oracle test compares the CLI output with du byte for byte.
+- Windows disk usage is now the NTFS `AllocationSize`: tiny files kept in the
+  file table no longer count a whole cluster, and the cluster cache is gone.
+- `largest` takes `count_links`, and the CLI passes `-l` to `--top`.
+- `-s`, `--top` and `--json` are exclusive. `-x`, `-L` and `-l` each have a
+  test of their effect. `-h` prints bytes without a unit, like du.
+- An unreadable root still yields its own line with the error counted.
+- The README, the docstrings and the CHANGELOG were corrected: options of
+  `largest`, memory use of `iter_dirs`, no speed claim, and the behaviour
+  changes of `dir_size` and `file_count`.
 
 ## Out of scope
 

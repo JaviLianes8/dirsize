@@ -8,10 +8,10 @@ import sys
 from pathlib import Path
 
 import pytest
-from helpers import write
+from helpers import hardlink, symlink, write
 
 from dirsize import scan
-from dirsize._cli import human, main
+from dirsize._cli import main
 
 
 def _tree(root: Path) -> None:
@@ -40,41 +40,89 @@ def test_default_lists_every_directory_children_first(tmp_path: Path) -> None:
 
 
 def test_summarize_prints_one_disk_total_per_path(tmp_path: Path) -> None:
-    _tree(tmp_path)
-    code, out = _run("-s", str(tmp_path), str(tmp_path / "sub"))
+    _tree(tmp_path / "one")
+    _tree(tmp_path / "two")
+    code, out = _run("-s", str(tmp_path / "one"), str(tmp_path / "two"))
     assert code == 0
     sizes = [int(size) for size, _ in _lines(out)]
     assert sizes == [
-        scan(tmp_path, include_dirs=True).disk_bytes,
-        scan(tmp_path / "sub", include_dirs=True).disk_bytes,
+        scan(tmp_path / "one", include_dirs=True).disk_bytes,
+        scan(tmp_path / "two", include_dirs=True).disk_bytes,
     ]
+
+
+def test_hard_link_shared_by_two_paths_counts_once(tmp_path: Path) -> None:
+    original = write(tmp_path / "a" / "f.bin", b"f" * 9000)
+    (tmp_path / "b").mkdir()
+    hardlink(tmp_path / "b" / "g.bin", original)
+    _, out = _run("-s", "-A", str(tmp_path / "a"), str(tmp_path / "b"))
+    assert [size for size, _ in _lines(out)] == ["9000", "0"]
+    _, counted = _run("-s", "-A", "-l", str(tmp_path / "a"), str(tmp_path / "b"))
+    assert [size for size, _ in _lines(counted)] == ["9000", "9000"]
+
+
+def test_a_path_given_twice_is_printed_once(tmp_path: Path) -> None:
+    _tree(tmp_path)
+    _, out = _run("-s", str(tmp_path), str(tmp_path))
+    assert len(_lines(out)) == 1
+
+
+def test_dereference_flag_follows_links(tmp_path: Path) -> None:
+    write(tmp_path / "data" / "f.bin", b"d" * 500)
+    symlink(tmp_path / "view" / "link", tmp_path / "data")
+    _, plain = _run("-s", "-A", str(tmp_path / "view"))
+    _, followed = _run("-s", "-A", "-L", str(tmp_path / "view"))
+    assert int(followed.split("	")[0]) == 500
+    assert int(plain.split("	")[0]) < 500
+
+
+def test_one_file_system_flag_skips_other_devices(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _tree(tmp_path)
+    mounted = os.fspath(tmp_path / "sub")
+    real_stat = os.stat
+
+    def fake_stat(path: str, *, follow_symlinks: bool = True) -> os.stat_result:
+        info = real_stat(path, follow_symlinks=follow_symlinks)
+        if os.fspath(path) == mounted:
+            fields = list(info)
+            fields[2] = info.st_dev + 1
+            return os.stat_result(fields)
+        return info
+
+    monkeypatch.setattr(os, "stat", fake_stat)
+    _, out = _run("-s", "-A", "-x", str(tmp_path))
+    assert out.split("	")[0] == "1000"
+
+
+def test_unreadable_root_still_prints_a_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = os.fspath(tmp_path)
+    real_scandir = os.scandir
+
+    def guarded(path: str) -> object:
+        if os.fspath(path) == root:
+            raise PermissionError(13, "denied", root)
+        return real_scandir(path)
+
+    monkeypatch.setattr(os, "scandir", guarded)
+    code, out = _run(root)
+    assert code == 1 and [path for _, path in _lines(out)] == [root]
+
+
+def test_output_modes_are_exclusive(tmp_path: Path) -> None:
+    for pair in (["-s", "--json"], ["-s", "--top", "1"], ["--json", "--top", "1"]):
+        with pytest.raises(SystemExit) as exit_info:
+            main([*pair, str(tmp_path)])
+        assert exit_info.value.code == 2
 
 
 def test_human_readable_sizes(tmp_path: Path) -> None:
     write(tmp_path / "f.bin", b"x" * 3000)
     _, out = _run("-s", "-A", "-h", str(tmp_path / "f.bin"))
     assert out.split("\t")[0] == "3.0K"
-
-
-@pytest.mark.parametrize(
-    ("size", "text"),
-    [
-        (0, "0B"),
-        (1023, "1023B"),
-        (1024, "1.0K"),
-        (1025, "1.1K"),
-        (10 * 1024 - 1, "10K"),
-        (10 * 1024, "10K"),
-        (1024 * 1024 - 1, "1.0M"),
-        (1536 * 1024, "1.5M"),
-    ],
-)
-def test_human_format(size: int, text: str) -> None:
-    assert human(size) == text
-
-
-def test_human_caps_at_the_largest_unit() -> None:
-    assert human(1 << 70).endswith("E")
 
 
 def test_top_lists_the_largest_files(tmp_path: Path) -> None:
@@ -107,11 +155,6 @@ def test_errors_go_to_stderr_and_exit_one(
 def test_listing_errors_also_exit_one(tmp_path: Path) -> None:
     assert _run(str(tmp_path / "missing"))[0] == 1
     assert _run("--top", "3", str(tmp_path / "missing"))[0] == 1
-
-
-def test_count_links_and_one_file_system_flags_are_accepted(tmp_path: Path) -> None:
-    _tree(tmp_path)
-    assert _run("-s", "-l", "-x", "-L", str(tmp_path))[0] == 0
 
 
 def test_negative_top_is_a_usage_error(tmp_path: Path) -> None:

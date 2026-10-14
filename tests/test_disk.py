@@ -11,7 +11,7 @@ import pytest
 from helpers import write
 
 from dirsize import scan
-from dirsize._platform import _round_up, apparent_bytes, is_link, posix_disk_bytes
+from dirsize._platform import apparent_bytes, is_link, posix_disk_bytes
 
 windows_only = pytest.mark.skipif(sys.platform != "win32", reason="NTFS allocation")
 
@@ -47,11 +47,6 @@ def test_apparent_bytes_only_for_files_and_symlinks() -> None:
     assert apparent_bytes(info(0o100644, -1)) == 0
 
 
-def test_round_up_to_whole_units() -> None:
-    assert [_round_up(n, 4096) for n in (0, 1, 4096, 4097)] == [0, 4096, 4096, 8192]
-    assert _round_up(5, 0) == 5
-
-
 def test_a_reparse_point_is_a_link_only_when_it_names_another_path() -> None:
     attributes = 0x400
     assert is_link(_stat(0, st_file_attributes=attributes, st_reparse_tag=0xA0000003))
@@ -68,13 +63,23 @@ def test_disk_bytes_of_a_plain_file_cover_its_size(tmp_path: Path) -> None:
 
 
 @windows_only
-def test_disk_bytes_are_whole_clusters_on_windows(tmp_path: Path) -> None:
+def test_disk_bytes_follow_ntfs_allocation(tmp_path: Path) -> None:
     write(tmp_path / "a.bin", os.urandom(5000))
-    write(tmp_path / "b.bin", os.urandom(1))
-    small = scan(tmp_path / "b.bin").disk_bytes
-    assert small >= 512 and small & (small - 1) == 0
+    write(tmp_path / "tiny.bin", b"x")
     big = scan(tmp_path / "a.bin").disk_bytes
-    assert big >= 5000 and big % small == 0
+    assert big >= 5000 and big % 512 == 0
+    # A tiny file lives inside the file table and takes no cluster of its own.
+    assert scan(tmp_path / "tiny.bin").disk_bytes < 512
+
+
+@windows_only
+def test_windows_falls_back_to_the_size_when_the_file_cannot_be_opened(tmp_path: Path) -> None:
+    from dirsize._platform import disk_bytes
+
+    target = write(tmp_path / "f.bin", b"z" * 700)
+    info = os.stat(target)
+    target.unlink()
+    assert disk_bytes(str(target), info) == 700
 
 
 @windows_only

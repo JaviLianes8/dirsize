@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 import pytest
-from helpers import sparse, write
+from helpers import hardlink, sparse, write
 
 from dirsize import DirUsage, FileUsage, iter_dirs, largest
 
@@ -77,6 +77,15 @@ def test_largest_by_disk_differs_from_by_apparent(tmp_path: Path) -> None:
     assert Path(by_size.path).name == "hole.bin"
     (biggest_dir,) = largest(tmp_path, 1, kind="dir", by="apparent")
     assert biggest_dir.apparent_bytes == 200_000 + (10 << 20)
+
+
+def test_largest_count_links_weighs_every_name(tmp_path: Path) -> None:
+    original = write(tmp_path / "a.bin", b"a" * 300)
+    hardlink(tmp_path / "b.bin", original)
+    plain = sorted(i.apparent_bytes for i in largest(tmp_path, 2, by="apparent"))
+    counted = largest(tmp_path, 2, by="apparent", count_links=True)
+    assert plain == [0, 300]
+    assert [i.apparent_bytes for i in counted] == [300, 300]
 
 
 def test_largest_zero_and_more_than_available(tmp_path: Path) -> None:

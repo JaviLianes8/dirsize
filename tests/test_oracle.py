@@ -6,6 +6,7 @@ build under that name next to the uutils port). Without either the module skips.
 
 from __future__ import annotations
 
+import io
 import os
 import random
 import shutil
@@ -16,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from dirsize import iter_dirs, scan
+from dirsize._cli import main
 
 
 def _gnu_du() -> str | None:
@@ -58,10 +60,11 @@ def _build(root: Path, seed: int) -> None:
                 handle.truncate(rng.choice([1 << 16, 1 << 20]))
         elif roll < 0.94 and files:
             os.symlink(rng.choice(files), parent / f"l{index}")
-        elif len(dirs) > 1:
-            target = rng.choice(dirs[1:])
-            if parent != target and target not in parent.parents:
-                os.symlink(target, parent / f"ld{index}", target_is_directory=True)
+        elif roll < 0.96:
+            os.symlink(parent / f"gone{index}", parent / f"dl{index}")
+        else:
+            # Any folder, the root and the link's own ancestors included: loops for -L.
+            os.symlink(rng.choice(dirs), parent / f"ld{index}", target_is_directory=True)
 
 
 def _tree(tmp_path: Path, seed: int) -> Path:
@@ -71,11 +74,18 @@ def _tree(tmp_path: Path, seed: int) -> Path:
     return root
 
 
-def _du(*args: str) -> dict[str, int]:
+def _du_run(*args: str) -> tuple[dict[str, int], int]:
+    """Return du's sizes by path and how many errors it printed (exit 1 when any)."""
     assert DU is not None
-    done = subprocess.run([DU, *args], capture_output=True, text=True, check=True)
+    done = subprocess.run([DU, *args], capture_output=True, text=True, check=False)
+    errors = len([line for line in done.stderr.splitlines() if line.strip()])
+    assert done.returncode == (1 if errors else 0), done.stderr
     rows = (line.split("\t", 1) for line in done.stdout.splitlines())
-    return {path: int(size) for size, path in rows}
+    return {path: int(size) for size, path in rows}, errors
+
+
+def _du(*args: str) -> dict[str, int]:
+    return _du_run(*args)[0]
 
 
 @pytest.mark.parametrize("seed", SEEDS)
@@ -107,5 +117,20 @@ def test_count_links_matches_du_l(tmp_path: Path, seed: int) -> None:
 def test_follow_symlinks_matches_du_capital_l(tmp_path: Path, seed: int) -> None:
     root = _tree(tmp_path, seed)
     usage = scan(root, include_dirs=True, follow_symlinks=True)
-    assert usage.apparent_bytes == _du("-sbL", str(root))[str(root)]
+    sizes, errors = _du_run("-sbL", str(root))
+    # du -L cannot access a dangling link: one error each, and the link adds nothing.
+    assert [e.kind for e in usage.errors] == ["missing"] * errors
+    assert usage.apparent_bytes == sizes[str(root)]
     assert usage.disk_bytes == _du("-sL", "-B1", str(root))[str(root)]
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_cli_with_several_paths_matches_du(tmp_path: Path, seed: int) -> None:
+    root = _tree(tmp_path, seed)
+    subdirs = sorted(p for p in _du("-b", str(root)) if p != str(root))
+    paths = [*subdirs[:2], str(root), *subdirs[:1], str(root)]
+    for flags, du_flags in ((["-s", "-A"], ["-sb"]), (["-s"], ["-s", "-B1"]), (["-A"], ["-b"])):
+        out = io.StringIO()
+        main([*flags, *paths], out=out)
+        expected = subprocess.run([DU or "", *du_flags, *paths], capture_output=True, text=True)
+        assert out.getvalue() == expected.stdout
