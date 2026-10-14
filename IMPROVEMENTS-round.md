@@ -2,13 +2,13 @@
 
 Progress:
 - [x] Brainstorm ranked improvements (this file)
-- [ ] Typed results and errors (`Usage`, `DirUsage`, `FileUsage`, `ScanError`)
-- [ ] Walker: junctions and other name-surrogate reparse points not followed, cycles, one filesystem
-- [ ] Disk usage: `st_blocks` on POSIX, compressed and sparse aware allocation on Windows
-- [ ] Streaming per-directory totals, top-N largest files and directories
-- [ ] CLI (`dirsize PATH...`, `python -m dirsize`) with JSON output
+- [x] Typed results and errors (`Usage`, `DirUsage`, `FileUsage`, `ScanError`)
+- [x] Walker: junctions and other name-surrogate reparse points not followed, cycles, one filesystem
+- [x] Disk usage: `st_blocks` on POSIX, compressed and sparse aware allocation on Windows
+- [x] Streaming per-directory totals, top-N largest files and directories
+- [x] CLI (`dirsize PATH...`, `python -m dirsize`) with JSON output
 - [ ] Docs: README, CHANGELOG, docstrings, runnable README examples
-- [ ] Contracts, GNU du oracle (WSL), installed wheel e2e, mutation run
+- [ ] (in progress: contract and scan tests written) Contracts, GNU du oracle (WSL), installed wheel e2e, mutation run
 - [ ] Gates: ruff format, ruff check, mypy --strict, pytest
 - [ ] Independent review findings fixed
 - [ ] Pull request opened, guard clean

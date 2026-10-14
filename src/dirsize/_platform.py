@@ -16,8 +16,8 @@ def is_link(info: os.stat_result) -> bool:
     """True for a symlink, or on Windows for any reparse point that names another path."""
     if stat.S_ISLNK(info.st_mode):
         return True
-    attributes = getattr(info, "st_file_attributes", 0)
-    tag = getattr(info, "st_reparse_tag", 0)
+    attributes = getattr(info, "st_file_attributes", 0) or 0
+    tag = getattr(info, "st_reparse_tag", 0) or 0
     return bool(attributes & _REPARSE_POINT) and bool(tag & _NAME_SURROGATE)
 
 
