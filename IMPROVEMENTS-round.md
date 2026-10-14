@@ -11,7 +11,7 @@ Progress:
 - [x] Contracts, GNU du oracle (WSL), installed wheel e2e, mutation run
 - [x] Gates: ruff format, ruff check, mypy --strict, pytest
 - [ ] Independent review findings fixed
-- [ ] Pull request opened, guard clean
+- [x] Pull request opened (#2), guard clean
 
 Every item is additive. `dir_size`, `file_count` and `OnError` keep their names,
 signatures and return values on ordinary trees.
