@@ -71,7 +71,9 @@ def test_two_links_to_one_directory_count_it_once(tmp_path: Path) -> None:
     write(tmp_path / "view" / "keep.bin", b"k")
     symlink(tmp_path / "view" / "a", real)
     symlink(tmp_path / "view" / "b", real)
-    assert scan(tmp_path / "view", follow_symlinks=True).apparent_bytes == 51
+    usage = scan(tmp_path / "view", follow_symlinks=True)
+    assert (usage.apparent_bytes, usage.files, usage.dirs) == (51, 2, 1)
+    assert usage.ok
 
 
 def test_symlinked_root_is_resolved(tmp_path: Path) -> None:
@@ -89,6 +91,8 @@ def test_broken_symlink_is_an_error_when_following(tmp_path: Path) -> None:
     symlink(tmp_path / "dangling", tmp_path / "missing")
     usage = scan(tmp_path, follow_symlinks=True)
     assert [e.kind for e in usage.errors] == ["missing"] and usage.files == 0
+    (root,) = iter_dirs(tmp_path, follow_symlinks=True)
+    assert root.errors == 1
 
 
 def test_two_followed_links_to_one_file_count_it_once(tmp_path: Path) -> None:

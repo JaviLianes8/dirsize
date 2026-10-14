@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
-from helpers import write
+from helpers import sparse, write
 
 from dirsize import DirUsage, FileUsage, iter_dirs, largest
 
@@ -60,17 +61,22 @@ def test_largest_directories(tmp_path: Path) -> None:
 
 
 def test_largest_ties_keep_walk_order(tmp_path: Path) -> None:
-    for name in ("x", "y", "z"):
+    for name in ("x", "y", "z", "w"):
         write(tmp_path / name, b"t" * 10)
-    order = [Path(i.path).name for i in largest(tmp_path, 3, by="apparent")]
-    walked = [Path(i.path).name for i in largest(tmp_path, 3, by="apparent")]
-    assert order == walked and len(order) == 3
+    walked = [entry.name for entry in os.scandir(tmp_path)]
+    assert [Path(i.path).name for i in largest(tmp_path, 4, by="apparent")] == walked
+    assert [Path(i.path).name for i in largest(tmp_path, 2, by="apparent")] == walked[:2]
 
 
-def test_largest_by_disk_is_the_default(tmp_path: Path) -> None:
-    _tree(tmp_path)
-    (first,) = largest(tmp_path, 1)
-    assert first.disk_bytes == max(i.disk_bytes for i in largest(tmp_path, 10))
+def test_largest_by_disk_differs_from_by_apparent(tmp_path: Path) -> None:
+    write(tmp_path / "dense.bin", os.urandom(200_000))
+    sparse(tmp_path / "hole.bin", 10 << 20)
+    (by_disk,) = largest(tmp_path, 1)
+    (by_size,) = largest(tmp_path, 1, by="apparent")
+    assert Path(by_disk.path).name == "dense.bin"
+    assert Path(by_size.path).name == "hole.bin"
+    (biggest_dir,) = largest(tmp_path, 1, kind="dir", by="apparent")
+    assert biggest_dir.apparent_bytes == 200_000 + (10 << 20)
 
 
 def test_largest_zero_and_more_than_available(tmp_path: Path) -> None:

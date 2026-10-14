@@ -19,6 +19,24 @@ def write(path: Path, data: bytes) -> Path:
     return path
 
 
+def sparse(path: Path, size: int) -> Path:
+    """Create a file of ``size`` bytes made of one hole, or skip when holes are not kept."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"")
+    if sys.platform == "win32":
+        for args in (["sparse", "setflag"], ["file", "seteof"]):
+            extra = [str(size)] if args[0] == "file" else []
+            done = subprocess.run(["fsutil", *args, str(path), *extra], capture_output=True)
+            if done.returncode != 0:
+                pytest.skip("fsutil cannot make sparse files here")
+    else:
+        with path.open("r+b") as handle:
+            handle.truncate(size)
+        if getattr(path.stat(), "st_blocks", 0) * 512 >= size:
+            pytest.skip("this file system does not keep holes")
+    return path
+
+
 def hardlink(link: Path, target: Path) -> Path:
     """Create a hard link, or skip when the file system cannot."""
     try:

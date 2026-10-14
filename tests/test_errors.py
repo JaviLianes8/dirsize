@@ -121,3 +121,19 @@ def test_error_while_listing_ends_that_directory_only(
     usage = scan(tmp_path)
     assert usage.apparent_bytes == 5 and usage.dirs == 1
     assert [e.kind for e in usage.errors] == ["other"]
+
+
+def test_nested_errors_add_up_to_the_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    write(tmp_path / "a" / "b" / "locked" / "x.bin", b"x")
+    write(tmp_path / "a" / "keep.bin", b"k")
+    locked = os.fspath(tmp_path / "a" / "b" / "locked")
+    real_scandir = os.scandir
+
+    def guarded(path: str) -> object:
+        if os.fspath(path) == locked:
+            raise PermissionError(errno.EACCES, "denied", locked)
+        return real_scandir(path)
+
+    monkeypatch.setattr(os, "scandir", guarded)
+    errors = {Path(d.path).name: d.errors for d in iter_dirs(tmp_path)}
+    assert errors == {"b": 1, "a": 1, tmp_path.name: 1}

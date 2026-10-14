@@ -72,8 +72,9 @@ def test_disk_bytes_are_whole_clusters_on_windows(tmp_path: Path) -> None:
     write(tmp_path / "a.bin", os.urandom(5000))
     write(tmp_path / "b.bin", os.urandom(1))
     small = scan(tmp_path / "b.bin").disk_bytes
-    assert small > 0
-    assert scan(tmp_path / "a.bin").disk_bytes % small == 0
+    assert small >= 512 and small & (small - 1) == 0
+    big = scan(tmp_path / "a.bin").disk_bytes
+    assert big >= 5000 and big % small == 0
 
 
 @windows_only
