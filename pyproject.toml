@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dirsize"
-version = "0.1.0"
-description = "Total size and file count of a directory tree as one typed call, with hardlink dedupe and safe symlink handling"
+version = "0.2.0"
+description = "Size of a directory tree, apparent and on disk, as typed calls and a du-like CLI, with hard link dedupe and safe link handling"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -19,6 +19,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = []
+
+[project.scripts]
+dirsize = "dirsize._cli:main"
 
 [project.optional-dependencies]
 dev = ["ruff", "mypy", "pytest", "build", "twine"]

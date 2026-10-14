@@ -1,111 +1,142 @@
-"""Walk a directory tree once and total its size or count its files."""
+"""The public measuring functions, all thin layers over one walk."""
 
 from __future__ import annotations
 
+import heapq
 import os
-from collections.abc import Callable
+from collections.abc import Iterator
 from typing import Literal
 
-ErrorHandler = Callable[[OSError], None]
-OnError = Literal["raise", "ignore"] | ErrorHandler
-PathLike = str | os.PathLike[str]
+from ._types import (
+    DirUsage,
+    ErrorHandler,
+    FileUsage,
+    Measure,
+    OnError,
+    PathLike,
+    ScanError,
+    Usage,
+    as_handler,
+)
+from ._walk import WalkOptions, walk
 
 
-def _raise(error: OSError) -> None:
-    raise error
+def _items(path: PathLike, handle: ErrorHandler, **options: bool) -> Iterator[FileUsage | DirUsage]:
+    return walk(os.fspath(path), WalkOptions(**options), handle)
 
 
-def _ignore(error: OSError) -> None:
-    return None
-
-
-def _as_handler(on_error: OnError) -> ErrorHandler:
-    if callable(on_error):
-        return on_error
-    if on_error == "raise":
-        return _raise
-    if on_error == "ignore":
-        return _ignore
-    raise ValueError(f"on_error must be 'raise', 'ignore' or a callable, got {on_error!r}")
-
-
-def _measure(
-    root: PathLike,
+def scan(
+    path: PathLike,
     *,
-    follow_symlinks: bool,
-    on_error: OnError,
-    want_size: bool,
-) -> int:
-    handle = _as_handler(on_error)
-    total = 0
-    seen_files: set[tuple[int, int]] = set()
-    seen_dirs: set[tuple[int, int]] = set()
+    follow_symlinks: bool = False,
+    one_filesystem: bool = False,
+    count_links: bool = False,
+    include_dirs: bool = False,
+    on_error: OnError = "ignore",
+) -> Usage:
+    """Measure the tree at ``path`` and return its totals with every error met.
 
-    start = os.fspath(root)
-    if follow_symlinks:
-        try:
-            root_stat = os.stat(start)
-            seen_dirs.add((root_stat.st_dev, root_stat.st_ino))
-        except OSError as error:
-            handle(error)
+    ``disk_bytes`` is the space allocated (``st_blocks`` on POSIX, compressed or
+    sparse aware cluster allocation on Windows); ``apparent_bytes`` is the sum of
+    ``st_size``. A file with several hard links counts once unless ``count_links``.
+    Symlinks and Windows junctions below ``path`` are counted as links and not
+    entered unless ``follow_symlinks``; ``path`` itself is always resolved.
+    ``one_filesystem`` skips directories on another device, like ``du -x``.
+    ``include_dirs`` adds each directory's own size, as ``du`` does.
+    Errors are collected in :attr:`Usage.errors`; ``on_error="raise"`` stops at
+    the first one and a callable also sees each :class:`OSError` as it happens.
+    """
+    handle = as_handler(on_error)
+    errors: list[ScanError] = []
 
-    stack: list[str] = [start]
-    while stack:
-        current = stack.pop()
-        try:
-            iterator = os.scandir(current)
-        except OSError as error:
-            handle(error)
-            continue
-        with iterator:
-            for entry in iterator:
-                total += _visit(
-                    entry,
-                    stack,
-                    seen_files,
-                    seen_dirs,
-                    follow_symlinks=follow_symlinks,
-                    handle=handle,
-                    want_size=want_size,
-                )
-    return total
-
-
-def _visit(
-    entry: os.DirEntry[str],
-    stack: list[str],
-    seen_files: set[tuple[int, int]],
-    seen_dirs: set[tuple[int, int]],
-    *,
-    follow_symlinks: bool,
-    handle: ErrorHandler,
-    want_size: bool,
-) -> int:
-    try:
-        is_dir = entry.is_dir(follow_symlinks=follow_symlinks)
-        stat = os.stat(entry.path, follow_symlinks=follow_symlinks)
-    except OSError as error:
+    def collect(error: OSError) -> None:
+        errors.append(ScanError.from_os_error(error))
         handle(error)
-        return 0
 
-    if is_dir:
-        if follow_symlinks:
-            key = (stat.st_dev, stat.st_ino)
-            if key in seen_dirs:
-                return 0
-            seen_dirs.add(key)
-        stack.append(entry.path)
-        return 0
+    total: DirUsage | None = None
+    for item in _items(
+        path,
+        collect,
+        follow_symlinks=follow_symlinks,
+        one_filesystem=one_filesystem,
+        count_links=count_links,
+        include_dirs=include_dirs,
+    ):
+        if isinstance(item, DirUsage) and item.depth == 0:
+            total = item
+    name = os.fspath(path)
+    if total is None:
+        return Usage(name, 0, 0, 0, 0, 0, tuple(errors), measured=False)
+    a, d = total.apparent_bytes, total.disk_bytes
+    return Usage(name, a, d, total.files, total.dirs, total.links, tuple(errors))
 
-    if not want_size:
-        return 1
 
-    if stat.st_nlink > 1 and stat.st_ino != 0:
-        key = (stat.st_dev, stat.st_ino)
-        if key in seen_files:
-            return 0
-        seen_files.add(key)
-    return stat.st_size
+def iter_dirs(
+    path: PathLike,
+    *,
+    follow_symlinks: bool = False,
+    one_filesystem: bool = False,
+    count_links: bool = False,
+    include_dirs: bool = False,
+    on_error: OnError = "ignore",
+) -> Iterator[DirUsage]:
+    """Yield a :class:`DirUsage` for every directory, children before their parent.
+
+    The root comes last. Results stream while the walk goes on, so memory stays
+    bounded by the depth of the tree and the set of hard-linked files seen.
+    Options mean what they mean in :func:`scan`.
+    """
+    items = _items(
+        path,
+        as_handler(on_error),
+        follow_symlinks=follow_symlinks,
+        one_filesystem=one_filesystem,
+        count_links=count_links,
+        include_dirs=include_dirs,
+    )
+    return (item for item in items if isinstance(item, DirUsage))
+
+
+def largest(
+    path: PathLike,
+    n: int = 10,
+    *,
+    by: Measure = "disk",
+    kind: Literal["file", "dir"] = "file",
+    follow_symlinks: bool = False,
+    one_filesystem: bool = False,
+    on_error: OnError = "ignore",
+) -> list[FileUsage] | list[DirUsage]:
+    """Return the ``n`` largest files (or directories), biggest first.
+
+    Ties keep walk order. ``by`` picks ``"disk"`` or ``"apparent"`` bytes. A
+    directory's size includes everything below it. Only ``n`` items are held.
+    """
+    if n < 0:
+        raise ValueError(f"n must be zero or more, got {n}")
+    if by not in ("disk", "apparent"):
+        raise ValueError(f"by must be 'disk' or 'apparent', got {by!r}")
+    if kind not in ("file", "dir"):
+        raise ValueError(f"kind must be 'file' or 'dir', got {kind!r}")
+    want = FileUsage if kind == "file" else DirUsage
+    items = (
+        (_size(item, by), -order, item)
+        for order, item in enumerate(
+            _items(
+                path,
+                as_handler(on_error),
+                follow_symlinks=follow_symlinks,
+                one_filesystem=one_filesystem,
+            )
+        )
+        if isinstance(item, want)
+    )
+    top = heapq.nlargest(n, items, key=lambda entry: (entry[0], entry[1]))
+    return [entry[2] for entry in top]  # type: ignore[return-value]
+
+
+def _size(item: FileUsage | DirUsage, by: Measure) -> int:
+    return item.disk_bytes if by == "disk" else item.apparent_bytes
 
 
 def dir_size(
@@ -114,14 +145,19 @@ def dir_size(
     follow_symlinks: bool = False,
     on_error: OnError = "raise",
 ) -> int:
-    """Return the total size in bytes of every file under ``path``.
+    """Return the total size in bytes (apparent, ``st_size``) of every file under ``path``.
 
-    Hardlinked files are counted once. Symlinked directories are not descended
-    unless ``follow_symlinks`` is true, in which case loops are detected and
-    skipped. ``on_error`` is ``"raise"``, ``"ignore"`` or a callable that
-    receives each :class:`OSError`.
+    Hardlinked files are counted once. Symlinked directories and Windows junctions
+    are not descended unless ``follow_symlinks`` is true, in which case loops are
+    detected and skipped. ``on_error`` is ``"raise"``, ``"ignore"`` or a callable
+    that receives each :class:`OSError`.
     """
-    return _measure(path, follow_symlinks=follow_symlinks, on_error=on_error, want_size=True)
+    handle = as_handler(on_error)
+    return sum(
+        item.apparent_bytes
+        for item in _items(path, handle, follow_symlinks=follow_symlinks, report_cycles=False)
+        if isinstance(item, FileUsage)
+    )
 
 
 def file_count(
@@ -131,4 +167,6 @@ def file_count(
     on_error: OnError = "raise",
 ) -> int:
     """Return the number of files under ``path``, one per directory entry."""
-    return _measure(path, follow_symlinks=follow_symlinks, on_error=on_error, want_size=False)
+    handle = as_handler(on_error)
+    items = _items(path, handle, follow_symlinks=follow_symlinks, report_cycles=False)
+    return sum(1 for item in items if isinstance(item, FileUsage))
