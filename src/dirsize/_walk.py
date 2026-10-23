@@ -8,8 +8,10 @@ from collections.abc import Generator, Iterator
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from ._errors import cycle_error
 from ._platform import apparent_bytes, disk_bytes, is_link
-from ._types import DirUsage, ErrorHandler, FileUsage, WalkOptions, cycle_error
+from ._results import DirUsage, FileUsage
+from ._types import ErrorHandler, WalkOptions
 
 Key = tuple[int, int]
 Item = FileUsage | DirUsage
