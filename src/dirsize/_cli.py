@@ -15,8 +15,9 @@ from ._errors import ScanError
 from ._human import human
 from ._largest import top_items
 from ._results import DirUsage
+from ._state import Seen
 from ._types import Measure, WalkOptions
-from ._walk import Seen, walk
+from ._walk import walk
 
 
 def _parser() -> argparse.ArgumentParser:

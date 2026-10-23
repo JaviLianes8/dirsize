@@ -1,8 +1,30 @@
 # dirsize
 
-Size of a directory tree, apparent and on disk, as typed calls and a `du`-like
-command. Hard links count once, symlinks and Windows junctions are never followed
-by surprise, and unreadable folders are reported instead of ending the scan.
+[![Lianes8 Certified](https://lianes8studio.com/certified/lianes8-certified-badge.svg)](https://lianes8studio.com/certified)
+
+The size of a directory tree, apparent and on disk, as typed calls and a `du`-like
+command. Hard links count once, symlinks and Windows junctions are never followed by
+surprise, and unreadable folders are reported next to the result instead of ending the
+scan.
+
+## The problem
+
+Python has no call for "how big is this folder". `shutil.disk_usage` answers for the
+whole file system that holds a path, not for a tree. The usual recipe, `os.path.getsize`
+summed over `os.walk`, gets several things wrong:
+
+- a file with several hard links is added once per name;
+- it adds `st_size`, not the space the file takes, so sparse and compressed files count
+  at their full length;
+- on Windows, `os.walk` enters directory junctions by default. A junction that points at a
+  parent folder sends it round the loop until the path is too long: a test tree holding a
+  single 30-byte file was walked 128 folders deep and summed as 1,920 bytes (CPython
+  3.10.19, 3.13.2 and 3.14.2);
+- with `followlinks=True` it can loop on symlinks too, as the `os.walk` documentation warns.
+
+GNU `du` gets these right, but it is a separate program whose output you have to parse,
+and it is not part of Windows. `dirsize` gives you the same rules as typed functions, on
+Linux and Windows, with no dependencies.
 
 ## Install
 
@@ -10,73 +32,53 @@ by surprise, and unreadable folders are reported instead of ending the scan.
 pip install dirsize
 ```
 
-## Usage
+Python 3.10 or newer.
+
+## Quick start
+
+The examples below measure a folder `my_project` that holds `README.txt` (1,000
+bytes), `logo.png` (20,000 bytes), `src/app.py` (3,000 bytes) and `src/lib/util.py`
+(150 bytes).
 
 ```python
 from dirsize import scan
 
 usage = scan("my_project")
-print(usage.disk_bytes, usage.apparent_bytes, usage.files, usage.dirs)
-for error in usage.errors:
-    print("skipped:", error.path, error.kind, error.message)
+print(usage.apparent_bytes, usage.files, usage.dirs, usage.ok)  # 24150 4 2 True
+print(usage.disk_bytes >= 20000)  # True
 ```
 
-`disk_bytes` is the space the files take on the disk. `apparent_bytes` is the
-sum of their sizes, what `ls -l` shows. They differ for sparse and compressed
-files, and because space is allocated in whole blocks.
-
-### Every directory, as it is measured
+`apparent_bytes` is the sum of the file sizes, what `ls -l` shows. `disk_bytes` is the
+space the files take on the disk, which is larger for small files (space comes in
+blocks) and smaller for sparse or compressed ones. Errors never stop a scan: each one
+is kept in `usage.errors` as a `ScanError` with the path, a kind and the system message.
 
 ```python
-from dirsize import iter_dirs
+from pathlib import Path
+
+from dirsize import iter_dirs, largest
 
 for folder in iter_dirs("my_project"):
-    print(folder.disk_bytes, folder.path)
+    print(Path(folder.path).name, folder.apparent_bytes, folder.depth)
+# lib 150 2
+# src 3150 1
+# my_project 24150 0
+
+for item in largest("my_project", 2, by="apparent"):
+    print(Path(item.path).name, item.apparent_bytes)
+# logo.png 20000
+# app.py 3000
 ```
 
-Directories stream children first and the root last, like `du` without `-s`.
-Each `DirUsage` carries the totals for its whole subtree and its `depth`.
-
-### The largest files or folders
-
-```python
-from dirsize import largest
-
-for item in largest("my_project", 5):
-    print(item.disk_bytes, item.path)
-
-for item in largest("my_project", 3, kind="dir", by="apparent"):
-    print(item.apparent_bytes, item.path)
-```
-
-Only `n` items are kept in memory while the tree is walked.
-
-### Options
-
-```python
-from dirsize import scan
-
-scan("my_project", follow_symlinks=True)  # enter symlinked folders and junctions
-scan("my_project", one_filesystem=True)  # skip folders on another device, like du -x
-scan("my_project", count_links=True)  # count every hard link, like du -l
-scan("my_project", include_dirs=True)  # add the blocks folders take, like du
-scan("my_project", on_error="raise")  # stop at the first unreadable path
-```
-
-`iter_dirs` takes the same options; `largest` takes all but `include_dirs`.
-`on_error` may also be a callable that receives each `OSError` as it happens.
-
-### The simple calls
+`iter_dirs` streams one total per folder, children before their parent and the root
+last, like `du` without `-s`; sibling folders come in the order the file system lists
+them. `largest` keeps only `n` items in memory while it walks.
 
 ```python
 from dirsize import dir_size, file_count
 
-print(dir_size("my_project"))  # apparent bytes, hard links once
-print(file_count("my_project"))  # one per name, links included
+print(dir_size("my_project"), file_count("my_project"))  # 24150 4
 ```
-
-These two raise on the first unreadable path unless `on_error="ignore"` or a
-callable is given, and they skip link loops silently.
 
 ## Command line
 
@@ -84,53 +86,39 @@ callable is given, and they skip link loops silently.
 dirsize [-s] [-A] [-h] [-x] [-L] [-l] [--top N] [--json] [PATH ...]
 ```
 
-Without options it prints the disk usage in bytes of every directory, children
-first, like `du`. `-s` prints one total per path, `-A` uses apparent sizes, `-h`
-prints sizes such as `1.5K` or `20M` (rounded up, as `du -h` does), `--top N`
-lists the N largest files, and `--json` prints one document with the totals and
-errors of each path; these three are exclusive. Like `du`, a hard link or a
-folder shared by several paths counts only under the first. Errors go to
-standard error and the exit status is 1. The same tool runs as
-`python -m dirsize`.
+Without options it prints the disk usage in bytes of every directory, children first,
+like `du`. `-s` prints one total per path, `-A` uses apparent sizes and `-h` prints sizes
+such as `1.5K` or `20M`, rounded up exactly as `du -h` does. `--top N` lists the N largest
+files of each path and `--json` prints one document with the totals and errors of each
+path; `-s`, `--top` and `--json` exclude each other. `-x`, `-L` and `-l` mean what they
+mean for `du`. Errors go to standard error and make the exit status 1. The same tool
+runs as `python -m dirsize`.
 
-## What is counted
+## API
 
-- **Hard links.** A file with several names counts once, in the folder where it
-  is met first, unless `count_links=True`. Every name still counts as a file.
-- **Links.** A symlink below the root, or a Windows junction or other reparse
-  point that names another path, counts as a link entry of its own size and is
-  not entered. With `follow_symlinks=True` its target is measured instead. The
-  root path is always resolved.
-- **Cycles.** A folder is entered at most once per device and file id. Like
-  `du -L`, a followed link back to a parent is simply not entered again; a
-  physical loop (a bind mount or a hard-linked folder) is reported as `cycle`.
-  When following links, a dangling one is a `missing` error, as in `du -L`.
-- **Disk usage.** On Linux and macOS it is `st_blocks * 512`. On Windows it is
-  the allocation NTFS reports for the file (`AllocationSize`), which already
-  accounts for compression, sparse ranges and tiny files kept inside the file
-  table; links and folders take 0 there.
-- **Apparent size.** Only regular files and symlinks have one, as in GNU du;
-  folders, devices and pipes add 0.
-- **Errors.** Each one becomes a `ScanError` with the path, a kind
-  (`permission`, `missing`, `cycle`, `other`) and the system message.
+| Name | What it is |
+| --- | --- |
+| `scan(path, ...)` | totals of a tree and every error met, as a `Usage` |
+| `iter_dirs(path, ...)` | a `DirUsage` per directory, streamed, root last |
+| `largest(path, n=10, ...)` | the `n` biggest files (`FileUsage`) or folders (`DirUsage`) |
+| `dir_size(path, ...)` | apparent bytes of every file, hard links once |
+| `file_count(path, ...)` | number of non-directory entries |
+| `Usage`, `DirUsage`, `FileUsage` | frozen results with `apparent_bytes`, `disk_bytes` and `size(by)` |
+| `ScanError` | one path that could not be measured: `path`, `kind`, `message` |
+| `Measure`, `ErrorKind`, `OnError` | the accepted values of `by`, `kind` and `on_error` |
 
-With `include_dirs=True` the totals match GNU `du -sb` (apparent) and
-`du -sB1` (disk) on Linux; the test suite checks this against GNU du on
-generated trees.
-
-## Why
-
-The standard library has no single call for the size of a directory tree. The
-common recipe, summing `os.path.getsize` over `os.walk`, double counts hard
-links, ignores what sparse and compressed files really take, walks into
-junctions on Windows and can loop forever on a link cycle. `dirsize` is the
-`du` primitive as typed functions: one `os.scandir` walk, `(st_dev, st_ino)`
-for hard links and cycles, and every error kept next to the result. No
-dependencies, `mypy --strict` clean.
+Options: `follow_symlinks`, `one_filesystem` (`du -x`), `count_links` (`du -l`),
+`include_dirs` (count the blocks of the folders themselves, as `du` does) and
+`on_error` (`"ignore"`, `"raise"` or a callable). The
+[guide](https://github.com/JaviLianes8/dirsize/blob/main/GUIDE.md) has the exact
+counting rules, the platform details, the errors, the command line and its JSON
+document; the
+[changelog](https://github.com/JaviLianes8/dirsize/blob/main/CHANGELOG.md) lists every
+change.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](https://github.com/JaviLianes8/dirsize/blob/main/LICENSE).
 
 ## Links
 

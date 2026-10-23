@@ -8,6 +8,9 @@ from dataclasses import dataclass
 
 from ._types import ErrorHandler, ErrorKind, OnError, shown
 
+# ERROR_CANT_RESOLVE_FILENAME: what Windows reports for a symlink loop (POSIX says ELOOP).
+_CANT_RESOLVE = 1921
+
 
 @dataclass(frozen=True)
 class ScanError:
@@ -15,8 +18,8 @@ class ScanError:
 
     ``kind`` is ``"permission"``, ``"missing"`` (vanished, not a directory, or a
     dangling link met while following links), ``"cycle"`` (a directory met again
-    inside itself without following links, or a link loop the system refused) or
-    ``"other"``. ``message`` is the system's own text for the error.
+    inside itself without following links, or a link that loops back to itself
+    while following links) or ``"other"``. ``message`` is the system's own text.
 
     >>> import errno
     >>> error = PermissionError(errno.EACCES, "Permission denied", "secret")
@@ -74,6 +77,6 @@ def _kind(error: OSError) -> ErrorKind:
         return "permission"
     if isinstance(error, (FileNotFoundError, NotADirectoryError)):
         return "missing"
-    if error.errno == errno.ELOOP:
+    if error.errno == errno.ELOOP or getattr(error, "winerror", None) == _CANT_RESOLVE:
         return "cycle"
     return "other"

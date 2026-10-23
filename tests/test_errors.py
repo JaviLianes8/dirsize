@@ -32,7 +32,7 @@ def test_errors_are_counted_on_the_directory_that_holds_them(tmp_path: Path) -> 
     locked = _locked_tree(tmp_path)
     with unreadable(locked):
         totals = {Path(d.path).name: d.errors for d in iter_dirs(tmp_path)}
-    assert totals == {"open": 0, tmp_path.name: 1}
+    assert totals == {"open": 0, "locked": 1, tmp_path.name: 1}
 
 
 def test_raise_stops_at_the_first_error(tmp_path: Path) -> None:
@@ -90,7 +90,7 @@ def test_scandir_failure_is_reported_on_any_platform(
 
     monkeypatch.setattr(os, "scandir", guarded)
     usage = scan(tmp_path)
-    assert usage.apparent_bytes == 11 and usage.dirs == 1
+    assert usage.apparent_bytes == 11 and usage.dirs == 2
     assert [(e.kind, e.path) for e in usage.errors] == [("permission", os.fspath(locked))]
     with pytest.raises(PermissionError):
         dir_size(tmp_path)
@@ -136,7 +136,7 @@ def test_nested_errors_add_up_to_the_root(tmp_path: Path, monkeypatch: pytest.Mo
 
     monkeypatch.setattr(os, "scandir", guarded)
     errors = {Path(d.path).name: d.errors for d in iter_dirs(tmp_path)}
-    assert errors == {"b": 1, "a": 1, tmp_path.name: 1}
+    assert errors == {"locked": 1, "b": 1, "a": 1, tmp_path.name: 1}
 
 
 def test_unreadable_root_reports_its_own_line(

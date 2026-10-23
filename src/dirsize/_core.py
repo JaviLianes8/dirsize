@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
+from contextlib import closing
 
 from ._errors import ScanError, as_handler
 from ._results import DirUsage, FileUsage, Usage
+from ._state import Seen
 from ._types import ErrorHandler, OnError, PathLike, WalkOptions, check_path
-from ._walk import Seen, walk
+from ._walk import walk
 
 
 def scan(
@@ -69,7 +71,7 @@ def iter_dirs(
     count_links: bool = False,
     include_dirs: bool = False,
     on_error: OnError = "ignore",
-) -> Iterator[DirUsage]:
+) -> Generator[DirUsage, None, None]:
     """Yield a :class:`DirUsage` for every directory, children before their parent.
 
     The root comes last. Results stream while the walk goes on; memory holds the
@@ -87,7 +89,16 @@ def iter_dirs(
     """
     name, handle = check_path(path), as_handler(on_error)
     options = WalkOptions(follow_symlinks, one_filesystem, count_links, include_dirs)
-    return (item for item in walk(name, options, handle) if isinstance(item, DirUsage))
+    return _only_dirs(walk(name, options, handle))
+
+
+def _only_dirs(
+    items: Generator[FileUsage | DirUsage, None, None],
+) -> Generator[DirUsage, None, None]:
+    with closing(items):  # closing this generator closes the walk and its listings at once
+        for item in items:
+            if isinstance(item, DirUsage):
+                yield item
 
 
 def dir_size(

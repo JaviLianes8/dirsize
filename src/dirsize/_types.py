@@ -40,16 +40,15 @@ def shown(value: object) -> str:
 
 def check_path(path: object) -> str:
     """Return ``path`` as text; bytes paths and other objects raise ``TypeError``."""
-    if isinstance(path, str):
-        return path
-    if isinstance(path, os.PathLike):
-        name = os.fspath(path)
-        if isinstance(name, str):
-            return name
-        kind = f"os.PathLike[{type(name).__name__}]"
-    else:
-        kind = type(path).__name__
-    raise TypeError(f"path must be a str or os.PathLike[str], got {kind[:SHOWN]}")
+    name = os.fspath(path) if isinstance(path, os.PathLike) else path
+    if not isinstance(name, str):
+        kind = type(name).__name__
+        if name is not path:
+            kind = f"os.PathLike[{kind}]"
+        raise TypeError(f"path must be a str or os.PathLike[str], got {kind[:SHOWN]}")
+    if chr(0) in name:
+        raise ValueError("path must not contain a NUL character")
+    return name
 
 
 def check_measure(by: object) -> Measure:
