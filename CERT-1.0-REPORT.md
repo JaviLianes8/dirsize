@@ -180,7 +180,8 @@ The preparation stage does not merge or publish. Items 16 and 19 remain pending.
 ## QA lenses: round 1 fixes (2026-11-01)
 
 Reviewed base: `9418522ec948ff5940d134be200c579a61637424`, branch `release/1.0.0`.
-Fix commit: the commit titled `fix qa round one contracts and diagnostics`.
+Fix commit: `ac3c46a3a72abbec2da4e0699d26b6a538f4ba17`
+(`fix qa round one contracts and diagnostics`).
 All 19 findings are addressed below. Independent lens rechecks remain pending;
 this fix round does not replace their verdicts or mark item 19 as passed.
 
