@@ -44,6 +44,9 @@ described in GUIDE.md.
 
 ### Fixed
 
+- Repeated file arguments to the CLI are skipped after their first measurement,
+  including files already reached through another root, matching repeated directory
+  arguments; `-l` counts file arguments every time.
 - `-h` rounded some sizes above 2**53 bytes down, because it used floating point; it
   now follows `du -h` in exact integers (`1152921504606846977` bytes print as `1.1E`),
   and sizes from 1024 EiB up use `Z`, `Y`, `R` and `Q` as `du` does.

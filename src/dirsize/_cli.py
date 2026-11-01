@@ -76,7 +76,7 @@ def _run(args: argparse.Namespace, stdout: TextIO, report: Callable[[OSError], N
     show = human if args.human_readable else str
     options = WalkOptions(args.dereference, args.one_file_system, args.count_links, True)
     documents: list[dict[str, object]] = []
-    seen = Seen()  # one hard link or directory counts once across all paths, as in du
+    seen = Seen(track_all=len(args.paths) > 1)
     for path in args.paths:
         if args.json or args.summarize:
             usage = measure(path, options, report, seen)

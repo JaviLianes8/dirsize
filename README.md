@@ -48,8 +48,9 @@ print(usage.disk_bytes >= 20000)  # True
 
 `apparent_bytes` is the sum of the file sizes, what `ls -l` shows. `disk_bytes` is the
 space the files take on the disk, which is larger for small files (space comes in
-blocks) and smaller for sparse or compressed ones. By default, filesystem errors do not stop a scan: each one
-is kept in `usage.errors` as a `ScanError` with the path, a kind and the system message.
+blocks) and smaller for sparse or compressed ones. By default, filesystem errors do not
+stop a scan: each one is kept in `usage.errors` as a `ScanError` with the path, a kind
+and the system message.
 
 ```python
 from pathlib import Path

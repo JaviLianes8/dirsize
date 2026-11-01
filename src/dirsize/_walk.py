@@ -48,7 +48,12 @@ def walk(
     info, _ = found
     state.root_dev = info.st_dev
     if not stat.S_ISDIR(info.st_mode):
+        key = (info.st_dev, info.st_ino)
+        if not options.count_links and info.st_ino != 0 and key in state.seen.files:
+            return
         apparent, disk = state.file_bytes(root, info)
+        if info.st_ino != 0:
+            state.seen.files.add(key)
         yield FileUsage(root, apparent, disk)
         yield DirUsage(root, apparent, disk, 1, 0, 0, 0, 0)
         return

@@ -47,6 +47,7 @@ class Seen:
 
     files: set[Key] = field(default_factory=set)
     dirs: set[Key] = field(default_factory=set)
+    track_all: bool = False
 
 
 @dataclass
@@ -66,7 +67,7 @@ class State:
     def file_bytes(self, path: str, info: os.stat_result) -> tuple[int, int]:
         key = (info.st_dev, info.st_ino)
         # Following links can reach one file by several paths even without hard links.
-        shared = info.st_nlink > 1 or self.options.follow_symlinks
+        shared = info.st_nlink > 1 or self.options.follow_symlinks or self.seen.track_all
         if not self.options.count_links and shared and info.st_ino != 0:
             if key in self.seen.files:
                 return 0, 0

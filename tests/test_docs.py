@@ -24,7 +24,7 @@ BADGE = (
 )
 MODULES = [
     "dirsize",
-    *(f"dirsize.{p.stem}" for p in sorted((ROOT / "src" / "dirsize").glob("_*.py"))),
+    *(f"dirsize.{p.stem}" for p in sorted(Path(dirsize.__file__).parent.glob("_*.py"))),
 ]
 PUBLIC_CLASSES = [dirsize.DirUsage, dirsize.FileUsage, dirsize.ScanError, dirsize.Usage]
 

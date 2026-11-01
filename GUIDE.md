@@ -137,6 +137,8 @@ holds the stack of open directories and the identities of the directories and
 hard-linked files seen; closing the iterator early closes every open directory
 listing. `largest` holds at most `n` results; ties keep walk order. `scan`,
 `dir_size` and `file_count` hold no per-file data.
+The CLI retains all file identities when given several roots so overlapping paths
+do not count the same file twice.
 
 ```python
 from pathlib import Path
@@ -173,6 +175,9 @@ Lines are `size<TAB>path`, as `du` prints them, with sizes in bytes. Paths defau
 matches `du -B1`, `du -sB1`, `du -b` and `du -sb` (with `-A`) byte for byte. A hard link or a directory shared by several paths
 counts only under the first, and a path given twice prints once, like `du`. Command
 line paths are resolved when they are links, like `du -D`.
+With `-l`, repeated file arguments are counted every time; directories are still
+entered once. In JSON mode an already-counted root has `measured=false` and zero
+totals, preserving one entry per argument.
 
 `-h` follows GNU `du -h` exactly: powers of 1024, the letters `K M G T P E Z Y R Q`,
 one decimal below 10, rounded up (`1025` bytes print as `1.1K`), plain bytes below
@@ -195,6 +200,9 @@ does, or with backslash escapes.
 - A directory reached a second time is skipped even without `-L` (two bind mounts of
   one folder); `du` counts both unless `-L`.
 - Windows junctions and other name surrogate reparse points are links.
+- The MSYS port of GNU du estimates resident NTFS file allocation differently;
+  dirsize uses Windows FILE_STANDARD_INFO directly (8 bytes for a one-byte resident
+  file on the tested NTFS volume, compared with 1,024 from MSYS du 8.32).
 - `--top` and `--json` have no `du` counterpart.
 
 ## Upgrading from 0.2.0
@@ -210,6 +218,7 @@ does, or with backslash escapes.
 - An unreadable subdirectory now yields its own `DirUsage` (one error, its own blocks
   with `include_dirs`) and counts in its parent's `dirs`, as `du` lists it.
 - A symlink loop is a `cycle` error on Windows too.
+- Repeated CLI file arguments are skipped unless `-l` is selected.
 - The command line prints errors as they happen, shares hard links and folders across
   paths in `--top` as in the other modes, prints exact `-h` sizes beyond 2**53 bytes
   and the units after `E`, ends quietly with status 1 when its output pipe closes, and
