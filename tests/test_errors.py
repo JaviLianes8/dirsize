@@ -154,4 +154,4 @@ def test_unreadable_root_reports_its_own_line(
     (only,) = iter_dirs(tmp_path)
     assert (only.path, only.errors, only.files, only.depth) == (root, 1, 0, 0)
     usage = scan(tmp_path)
-    assert usage.measured and [e.kind for e in usage.errors] == ["permission"]
+    assert not usage.measured and [e.kind for e in usage.errors] == ["permission"]

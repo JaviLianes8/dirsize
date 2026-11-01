@@ -17,6 +17,7 @@ Progress:
 - [x] Packaging, e2e and every Python (items 8, 10, 13, 14)
 - [x] Gates (item 15)
 - [x] PR #3 open and trace guard CLEAN
+- [x] QA round 1 findings corrected and regression contracts added
 - [ ] Five QA lenses report PASS (item 19)
 - [ ] Independent reviewer reports PASS (item 16)
 
@@ -175,3 +176,66 @@ timeout. The 73 skips are the platform cases listed above; the wheel test runs.
 
 PR: https://github.com/JaviLianes8/dirsize/pull/3, from `release/1.0.0` to `main`.
 The preparation stage does not merge or publish. Items 16 and 19 remain pending.
+
+## QA lenses: round 1 fixes (2026-11-01)
+
+Reviewed base: `9418522ec948ff5940d134be200c579a61637424`, branch `release/1.0.0`.
+Fix commit: the commit titled `fix qa round one contracts and diagnostics`.
+All 19 findings are addressed below. Independent lens rechecks remain pending;
+this fix round does not replace their verdicts or mark item 19 as passed.
+
+Behavior contracts were added before implementation: the initial focused run
+had 23 failures and 9 passes, reproducing every reported behavior bug. After the
+fixes, the four new contract modules passed all 47 cases. Existing assertions for
+the old unreadable-root flag and CLI diagnostic format were updated accordingly.
+
+| Finding | Change and verification |
+| --- | --- |
+| A-001, B-01 | Root listing-open failures return `measured=False`, zero totals and the retained permission record in `scan` and CLI JSON; both `include_dirs` modes use controlled nonzero allocation. |
+| A-002 | Preserve and document synthetic regular-file `DirUsage` roots in README, GUIDE and API docstrings; pin the path, bytes, counts and depth for both operations. |
+| A-003 | Each typing alias now has its own source attribute docstring with a runnable example, extracted and executed by name. GUIDE explicitly records this convention for shared typing objects; CHANGELOG no longer claims per-object runtime docstrings. Alias identity and API remain unchanged. |
+| B-02 | CLI `--top 0` consumes the walk, reports missing roots and exits 1; the API's existing zero-count validation-only contract remains unchanged. |
+| C-01 | Normalize string subclasses before validation, including values returned by `os.PathLike`; all five calls pass hostile string-hook contracts. |
+| C-02 | Validation and CLI usage errors omit supplied values, including unknown options and attached arguments; short sentinel contracts pass. |
+| C-03 | Raised filesystem exception text and CLI stderr redact paths and system-supplied text; error families and explicit metadata remain available. Short secret and 10,000-character path contracts pass, including `str`, `repr`, `errno`, filename and Windows error code checks. |
+| C-04 | Windows paths above 32,767 UTF-16 code units fail at the public call with documented `ValueError`; both ASCII and supplementary Unicode cases cover all five calls, including eager `iter_dirs` validation. |
+| E01 | Hard-link contracts check child and root bytes and file totals in `iter_dirs` with both `count_links` values. |
+| E02 | Synthetic nonzero directory allocation pins `include_dirs` for root and child totals on every platform. |
+| E03 | Controlled foreign-device metadata pins both `largest` kinds with and without `one_filesystem`. |
+| E04 | Pin the complete `OnError` alias and strictly type-check a public callback consumer using all five calls. |
+| E05 | Synthetic `winerror=1921` must classify as `cycle`. |
+| E06 | Preserve error messages with and without `strerror`, and their explicit paths. |
+| E07 | Failed Windows allocation queries fall back to plain size. |
+| E08 | Synthetic acquired handles close exactly once after successful, failed and exceptional queries; failed opens do not close an unacquired handle. |
+| E09 | An ASCII subprocess stream prints the entire escaped accented filename with exact stdout, empty stderr and exit 0. |
+| E10 | Buffered stderr instrumentation proves error visibility before measuring the next root. |
+
+The ten surviving lens-e mutations were reapplied individually in a scratch copy.
+Each new discriminator failed by assertion, with exit 1; source was restored after
+each run. These are additional contracts, not newly discovered production bugs.
+
+| Lens-e mutation | Detecting test in `tests/test_contract_*.py` |
+| --- | --- |
+| M05 | `accounting.py::test_iter_dirs_counts_hardlinks_in_child_and_root` |
+| M11 | `accounting.py::test_directory_allocation_includes_root_and_child` |
+| M14 | `accounting.py::test_largest_honours_foreign_device_boundary` |
+| M20 | `accounting.py::test_on_error_alias_and_typed_callback_consumer` |
+| M24 | `accounting.py::test_windows_loop_code_is_a_cycle` |
+| M25 | `accounting.py::test_bare_error_message_is_preserved` |
+| M29, M30 | `native.py::test_allocation_queries_close_each_acquired_handle` |
+| M37 | `output.py::test_ascii_stdout_preserves_complete_escaped_filename` |
+| M38 | `output.py::test_cli_errors_are_flushed_before_next_root` |
+
+Final gates on CPython 3.14.6: `ruff format --check .`, `ruff check .`,
+`mypy --strict src` and `mypy --strict src tests` each exit 0. The complete
+`pytest` run exits 0 with **208 passed, 79 skipped**, with `DIRSIZE_E2E=1` enabling
+the wheel build, clean installation and CLI consumer. Skips are 12 symlink privilege
+cases, one POSIX sparse-file case, 60 POSIX GNU-du cases and six optional external
+reference cases. No new interpreter matrix or independent QA verdict is claimed.
+All pytest runs use a 300-second per-test timeout and basetemp below
+`C:/lianes8-build/codex-pylib/scratch/dirsize-cert/fix-r1/`; logs and mutation
+results are retained there. No device-file fixtures were used.
+
+### Disputed findings
+
+None.

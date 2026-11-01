@@ -10,7 +10,7 @@ from typing import Protocol
 from ._errors import cycle_error
 from ._platform import is_link
 from ._results import DirUsage, FileUsage
-from ._state import Frame, Seen, State
+from ._state import Frame, RootStatus, Seen, State
 from ._types import ErrorHandler, WalkOptions
 
 Item = FileUsage | DirUsage
@@ -34,7 +34,11 @@ def _lookup(path: str, follow: bool, state: State) -> tuple[os.stat_result, bool
 
 
 def walk(
-    root: str, options: WalkOptions, handle: ErrorHandler, seen: Seen | None = None
+    root: str,
+    options: WalkOptions,
+    handle: ErrorHandler,
+    seen: Seen | None = None,
+    status: RootStatus | None = None,
 ) -> Generator[Item, None, None]:
     """Yield a :class:`FileUsage` per non-directory and a :class:`DirUsage` per directory.
 
@@ -42,6 +46,7 @@ def walk(
     Nothing is yielded when the root cannot be found, or was counted already in ``seen``.
     """
     state = State(options, handle, seen or Seen())
+    status = status if status is not None else RootStatus()
     found = _lookup(root, True, state)
     if found is None:
         return
@@ -54,6 +59,7 @@ def walk(
         apparent, disk = state.file_bytes(root, info)
         if info.st_ino != 0:
             state.seen.files.add(key)
+        status.measured = True
         yield FileUsage(root, apparent, disk)
         yield DirUsage(root, apparent, disk, 1, 0, 0, 0, 0)
         return
@@ -63,6 +69,7 @@ def walk(
     if root_frame is None:
         yield state.unreadable(root, info, 0)
         return
+    status.measured = True
     stack = [root_frame]
     try:
         while stack:

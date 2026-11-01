@@ -43,6 +43,8 @@ class DirUsage:
     directories entered below this one, ``errors`` the errors met inside it (a
     count; :attr:`Usage.errors` holds the errors themselves). ``depth`` is 0 for
     the root, 1 for its subdirectories, and so on.
+    A regular-file root is represented by a synthetic total with ``files=1``,
+    ``dirs=0`` and ``depth=0``.
 
     >>> folder = DirUsage("src", 1200, 8192, files=3, dirs=1, links=0, errors=0, depth=1)
     >>> folder.size(), folder.size("apparent")
@@ -71,8 +73,9 @@ class DirUsage:
 class Usage:
     """Result of :func:`dirsize.scan`: the totals for one path plus every error met.
 
-    ``measured`` is false when ``path`` itself could not be read; the totals are
-    then 0. ``ok`` is true when nothing went wrong at all.
+    ``measured`` is false when root metadata or its directory listing could not
+    be opened; the totals are then 0. Errors after opening the listing retain
+    partial totals and ``measured=True``. ``ok`` is true when nothing went wrong.
 
     >>> usage = Usage("project", apparent_bytes=5, disk_bytes=4096, files=1, dirs=0, links=0)
     >>> usage.ok, usage.measured, usage.size("apparent")

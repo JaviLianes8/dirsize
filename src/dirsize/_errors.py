@@ -6,7 +6,7 @@ import errno
 import os
 from dataclasses import dataclass
 
-from ._types import ErrorHandler, ErrorKind, OnError, shown
+from ._types import ErrorHandler, ErrorKind, OnError
 
 # ERROR_CANT_RESOLVE_FILENAME: what Windows reports for a symlink loop (POSIX says ELOOP).
 _CANT_RESOLVE = 1921
@@ -49,7 +49,7 @@ def as_handler(on_error: OnError) -> ErrorHandler:
         return _raise
     if isinstance(on_error, str) and str.__str__(on_error) == "ignore":
         return _ignore
-    raise ValueError(f"on_error must be 'raise', 'ignore' or a callable, got {shown(on_error)}")
+    raise ValueError("on_error must be 'raise', 'ignore' or a callable")
 
 
 def cycle_error(path: str) -> OSError:
@@ -58,7 +58,22 @@ def cycle_error(path: str) -> OSError:
 
 
 def _raise(error: OSError) -> None:
-    raise error
+    # Retain the exception family and explicit metadata without printing input paths.
+    kind = type(
+        type(error).__name__, (type(error),), {"__str__": diagnostic, "__repr__": diagnostic}
+    )
+    safe: OSError = OSError.__new__(kind)
+    OSError.__init__(safe, *error.args)
+    safe.__dict__.update(error.__dict__)
+    for name in ("errno", "strerror", "filename", "filename2", "winerror"):
+        if hasattr(error, name):
+            setattr(safe, name, getattr(error, name))
+    raise safe from None
+
+
+def diagnostic(error: OSError) -> str:
+    """A bounded description containing no filesystem-supplied text or paths."""
+    return f"{_kind(error)} filesystem error (path redacted)"
 
 
 def _ignore(error: OSError) -> None:

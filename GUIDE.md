@@ -54,10 +54,14 @@ default) and `apparent_bytes` for `"apparent"`, and raises `ValueError` for anyt
 else.
 
 - `Usage` (from `scan`): `path`, `apparent_bytes`, `disk_bytes`, `files`, `dirs`,
-  `links`, `errors` (a tuple of `ScanError`), `measured` (false when `path` itself could
-  not be read; the totals are then 0) and the property `ok` (measured with no error).
+  `links`, `errors` (a tuple of `ScanError`), `measured` (false when root metadata or
+  its directory listing cannot be opened; the totals are then 0) and the property
+  `ok` (measured with no error). Failures after opening the listing retain partial
+  totals and `measured=True`.
 - `DirUsage` (from `iter_dirs`, `largest(kind="dir")`): the same totals for one
   directory's subtree, plus `errors` as a count and `depth` (0 for the root).
+  A regular-file root produces one synthetic `DirUsage` with its bytes, `files=1`,
+  `dirs=0`, `links=0`, `errors=0` and `depth=0` in both operations.
 - `FileUsage` (from `largest`): `path`, `apparent_bytes`, `disk_bytes`, `is_link`.
   A second name of a hard-linked file weighs 0 unless `count_links=True`.
 
@@ -83,8 +87,11 @@ Mistakes in the call are raised at once, before anything is read:
 | `n` is not an `int` (`bool` included) | `TypeError` |
 | `n` is negative | `ValueError` |
 
-A path holding a NUL character raises `ValueError` too. Messages quote at most 40
-characters of a bad value.
+A path holding a NUL character raises `ValueError` too. On Windows, paths exceeding
+32,767 UTF-16 code units raise `ValueError` immediately, including at the `iter_dirs`
+call. Shorter paths can still exceed filesystem limits; those failures follow
+`on_error`. String subclasses are normalized to plain text before validation.
+Argument error messages describe accepted arguments without quoting supplied values.
 
 Problems met while reading the tree are `OSError`s, handled by `on_error`:
 `"ignore"` (the default of `scan`, `iter_dirs` and `largest`) goes on, `"raise"` (the
@@ -100,7 +107,15 @@ its subtree. Each kept error is a `ScanError` whose `kind` is:
 | `cycle` | a physical directory loop, or a chain of links the system refuses to resolve |
 | `other` | anything else, a read error for example |
 
-An unreadable directory still counts with its own size and one error, as `du` counts it.
+An unreadable directory in `iter_dirs` or a parent's subtree still counts with its
+own size and one error, as `du` counts it. `scan` of a root whose listing cannot be
+opened instead returns zero totals and `measured=False`, keeping the error record.
+
+Raised filesystem errors retain their exception family (for example, they can be
+caught as `FileNotFoundError`) and metadata such as `errno`, `winerror`, `filename`
+and `filename2`. Their `str` and `repr` contain only the error kind and a redaction
+notice. Callback errors and `ScanError` records retain the original diagnostic
+data; their explicit path and message fields can contain sensitive input.
 
 ```python
 from dirsize import dir_size, scan
@@ -126,7 +141,7 @@ except ValueError as error:
 try:
     largest("my_project", by="size")
 except ValueError as error:
-    print(error)  # by must be 'disk' or 'apparent', got 'size'
+    print(error)  # by must be 'disk' or 'apparent'
 ```
 
 ## Streaming and memory
@@ -139,6 +154,8 @@ listing. `largest` holds at most `n` results; ties keep walk order. `scan`,
 `dir_size` and `file_count` hold no per-file data.
 The CLI retains all file identities when given several roots so overlapping paths
 do not count the same file twice.
+`largest(path, 0)` validates arguments without reading the filesystem. The CLI's
+`--top 0` traverses all roots and reports errors, while printing no result lines.
 
 ```python
 from pathlib import Path
@@ -188,11 +205,27 @@ one decimal below 10, rounded up (`1025` bytes print as `1.1K`), plain bytes bel
 `{"path", "kind", "message"}`) and `measured`. The `-A` and `-h` options do not change
 it.
 
-Errors go to standard error as `dirsize: PATH: MESSAGE` while the walk goes on. The
+Errors go to standard error as `dirsize: KIND filesystem error (path redacted)`
+and are flushed immediately. Usage errors describe accepted options without echoing
+supplied values. JSON records and normal result lines retain complete paths. The
 exit status is 0 when everything was read, 1 when anything failed or the reader of
 standard output went away (`dirsize | head` ends quietly), and 2 for a usage error. A
 file name the output cannot encode is printed as its raw bytes on POSIX, as `du`
 does, or with backslash escapes.
+
+## Type aliases
+
+`ErrorKind`, `Measure` and `OnError` remain ordinary typing aliases. Each has a
+name-specific attribute docstring in the source with an executed example. This is
+the documentation convention for these three names: their runtime `__doc__` is
+owned by Python's shared typing objects and is not replaced.
+
+- `ErrorKind` is `Literal["permission", "missing", "cycle", "other"]`, the type of
+  `ScanError.kind`. Example: `kind: ErrorKind = "missing"`.
+- `Measure` is `Literal["disk", "apparent"]`, the selector for `size` and `largest`.
+  Example: `measure: Measure = "apparent"`.
+- `OnError` is `Literal["raise", "ignore"] | Callable[[OSError], None]`.
+  Example: with `errors: list[OSError] = []`, `policy: OnError = errors.append`.
 
 ## Differences from GNU du
 

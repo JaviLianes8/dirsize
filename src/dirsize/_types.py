@@ -3,19 +3,43 @@
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
 ErrorHandler = Callable[[OSError], None]
 OnError = Literal["raise", "ignore"] | ErrorHandler
+"""An error policy: raise, ignore, or call a handler with each filesystem error.
+
+>>> from dirsize import OnError
+>>> errors: list[OSError] = []
+>>> policy: OnError = errors.append
+>>> policy(OSError("read failed"))
+>>> len(errors)
+1
+"""
+
 PathLike = str | os.PathLike[str]
 ErrorKind = Literal["permission", "missing", "cycle", "other"]
-Measure = Literal["disk", "apparent"]
-Kind = Literal["file", "dir"]
+"""The classification stored in ScanError.kind.
 
-# Error messages quote at most this many characters of a bad argument.
-SHOWN = 40
+>>> from dirsize import ErrorKind, ScanError
+>>> kind: ErrorKind = ScanError.from_os_error(FileNotFoundError(2, "gone")).kind
+>>> kind
+'missing'
+"""
+
+Measure = Literal["disk", "apparent"]
+"""The byte total selected by a result's size method or by largest.
+
+>>> from dirsize import Measure, FileUsage
+>>> measure: Measure = "apparent"
+>>> FileUsage("file", 3, 4096).size(measure)
+3
+"""
+
+Kind = Literal["file", "dir"]
 
 
 @dataclass(frozen=True)
@@ -29,25 +53,18 @@ class WalkOptions:
     report_cycles: bool = True
 
 
-def shown(value: object) -> str:
-    """Describe ``value`` for an error message in at most ``SHOWN`` characters."""
-    try:
-        text = repr(value)
-    except Exception:  # a huge int or a broken __repr__ must not hide the real error
-        text = f"<{type(value).__name__}>"
-    return text if len(text) <= SHOWN else text[: SHOWN - 3] + "..."
-
-
 def check_path(path: object) -> str:
     """Return ``path`` as text; bytes paths and other objects raise ``TypeError``."""
     name = os.fspath(path) if isinstance(path, os.PathLike) else path
     if not isinstance(name, str):
-        kind = type(name).__name__
-        if name is not path:
-            kind = f"os.PathLike[{kind}]"
-        raise TypeError(f"path must be a str or os.PathLike[str], got {kind[:SHOWN]}")
+        raise TypeError("path must be a str or os.PathLike[str]")
+    name = str.__str__(name)
     if chr(0) in name:
         raise ValueError("path must not contain a NUL character")
+    if sys.platform == "win32" and (
+        len(name) > 32767 or len(name.encode("utf-16-le", "surrogatepass")) > 65534
+    ):
+        raise ValueError("path is too long for Windows (maximum 32767 UTF-16 code units)")
     return name
 
 
@@ -66,13 +83,13 @@ def _choice(value: object, name: str, choices: tuple[str, str]) -> str:
     if isinstance(value, str) and str.__str__(value) in choices:
         return str.__str__(value)
     first, second = choices
-    raise ValueError(f"{name} must be {first!r} or {second!r}, got {shown(value)}")
+    raise ValueError(f"{name} must be {first!r} or {second!r}")
 
 
 def check_count(n: object) -> int:
     """Return ``n`` when it is an ``int`` of zero or more."""
     if isinstance(n, bool) or not isinstance(n, int):
-        raise TypeError(f"n must be an int, got {type(n).__name__[:SHOWN]}")
+        raise TypeError("n must be an int")
     count = int.__index__(n)  # the value itself, whatever an int subclass overrides
     if count < 0:
         raise ValueError("n must be zero or more")

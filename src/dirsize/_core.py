@@ -7,7 +7,7 @@ from contextlib import closing
 
 from ._errors import ScanError, as_handler
 from ._results import DirUsage, FileUsage, Usage
-from ._state import Seen
+from ._state import RootStatus, Seen
 from ._types import ErrorHandler, OnError, PathLike, WalkOptions, check_path
 from ._walk import walk
 
@@ -54,10 +54,11 @@ def measure(name: str, options: WalkOptions, handle: ErrorHandler, seen: Seen) -
         handle(error)
 
     total: DirUsage | None = None
-    for item in walk(name, options, collect, seen):
+    status = RootStatus()
+    for item in walk(name, options, collect, seen, status):
         if isinstance(item, DirUsage) and item.depth == 0:
             total = item
-    if total is None:
+    if total is None or not status.measured:
         return Usage(name, 0, 0, 0, 0, 0, tuple(errors), measured=False)
     a, d = total.apparent_bytes, total.disk_bytes
     return Usage(name, a, d, total.files, total.dirs, total.links, tuple(errors))
@@ -78,6 +79,8 @@ def iter_dirs(
     walk stack and the identities of directories and hard-linked files seen.
     Arguments are checked at the call, the tree is read as the iterator is
     consumed. Options mean what they mean in :func:`scan`.
+    A regular-file root yields one synthetic ``DirUsage`` with its bytes,
+    ``files=1``, ``dirs=0`` and ``depth=0``.
 
     >>> import pathlib, tempfile
     >>> with tempfile.TemporaryDirectory() as tmp:

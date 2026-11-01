@@ -20,8 +20,15 @@ described in GUIDE.md.
 - `Usage.size(by)` and `FileUsage.size(by)`, as `DirUsage` already had.
 - `largest` is typed per `kind`: `list[FileUsage]` for files, `list[DirUsage]` for
   directories.
-- Every public name and method has a docstring with an example that runs as a test,
-  and a GUIDE with the exact counting rules, platform details, errors and command line.
+- Public functions, result classes and methods have runnable example docstrings.
+  The three typing aliases have individual source attribute docstrings with tested
+  examples, preserving Python's shared runtime typing objects. The GUIDE describes
+  exact counting rules, platform details, errors and the command line.
+- Contracts cover hard links in `iter_dirs`, nonzero directory allocation, device
+  boundaries in `largest`, callback typing, Windows error classification and native
+  handle cleanup, bare error messages, escaped CLI output and immediate error flushing.
+- Regular-file roots in `iter_dirs` and `largest(kind="dir")` are documented and
+  tested as synthetic `DirUsage` totals with one file and depth zero.
 - Results pickle under their public names (`dirsize.Usage`).
 - The package exports only its documented public names.
 
@@ -30,7 +37,12 @@ described in GUIDE.md.
 - Arguments are checked at the call, before anything is read: a path that is not a
   `str` or `os.PathLike[str]` (bytes included) raises `TypeError`, a path with a NUL
   character `ValueError`; `largest` raises `TypeError` for an `n` that is not an `int`
-  (a `bool` included). Error messages quote at most 40 characters of a bad value.
+  (a `bool` included). On Windows, paths exceeding 32,767 UTF-16 code units raise
+  `ValueError` at the call, including `iter_dirs`, before filesystem access.
+- Argument and CLI usage errors no longer echo supplied values. Raised filesystem
+  errors preserve their exception family and explicit metadata but redact input
+  from `str` and `repr`; CLI filesystem diagnostics show only the error kind.
+  Callback errors, structured records and normal output retain their full data.
 - `DirUsage.size` raises `ValueError` for an unknown `by` instead of returning the
   apparent size.
 - `Usage.ok` is false when the path itself was not measured.
@@ -44,6 +56,13 @@ described in GUIDE.md.
 
 ### Fixed
 
+- `scan` and CLI JSON report `measured=False` with zero totals when a root's
+  directory listing cannot be opened, preserving its error record. CLI summaries
+  omit these unmeasured roots, as they already do for missing roots.
+- CLI `--top 0` now traverses roots and reports filesystem errors even though it
+  prints no result lines. `largest(path, 0)` keeps its validation-only behavior.
+- String path subclasses, including those returned by `os.PathLike`, are normalized
+  before validation and traversal so overridden string hooks cannot interfere.
 - Repeated file arguments to the CLI are skipped after their first measurement,
   including files already reached through another root, matching repeated directory
   arguments; `-l` counts file arguments every time.
@@ -54,7 +73,7 @@ described in GUIDE.md.
   (`dirsize | head`): it stops quietly with status 1. It prints file names the output
   cannot encode as raw bytes on POSIX, as `du` does, or with backslash escapes, instead
   of failing.
-- Usage error messages are cut at 300 characters.
+- Usage error messages are bounded and do not quote invalid arguments.
 
 ## [0.2.0]
 

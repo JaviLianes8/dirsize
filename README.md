@@ -106,6 +106,11 @@ runs as `python -m dirsize`.
 | `ScanError` | one path that could not be measured: `path`, `kind`, `message` |
 | `Measure`, `ErrorKind`, `OnError` | the accepted values of `by`, `kind` and `on_error` |
 
+For a regular-file root, `iter_dirs` and `largest(kind="dir")` return a synthetic
+`DirUsage` containing that file's bytes, `files=1`, `dirs=0` and `depth=0`.
+The type aliases have individual source docstrings and tested examples; their
+runtime `__doc__` belongs to Python's shared typing objects.
+
 Options: `follow_symlinks`, `one_filesystem` (`du -x`), `count_links` (`du -l`),
 `include_dirs` (count the blocks of the folders themselves, as `du` does) and
 `on_error` (`"ignore"`, `"raise"` or a callable). The

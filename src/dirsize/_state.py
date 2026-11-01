@@ -51,6 +51,13 @@ class Seen:
 
 
 @dataclass
+class RootStatus:
+    """Whether the root's metadata and directory listing could be opened."""
+
+    measured: bool = False
+
+
+@dataclass
 class State:
     """Everything one walk shares: options, error policy, identities and ancestors."""
 

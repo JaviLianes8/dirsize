@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import doctest
 import importlib
 import io
+import itertools
 import re
 import tempfile
 from dataclasses import fields
@@ -58,6 +60,25 @@ def _doctests() -> list[doctest.DocTest]:
     # The classes name the package as their module, so their methods are found from here.
     for cls in PUBLIC_CLASSES:
         found += finder.find(cls, cls.__name__, module=False, globs=vars(dirsize).copy())
+    # Typing objects share runtime documentation; each alias has a source docstring.
+    path = Path(dirsize.__file__).parent / "_types.py"
+    nodes = ast.parse(path.read_text(encoding="utf-8")).body
+    for assignment, doc in itertools.pairwise(nodes):
+        if not isinstance(assignment, ast.Assign) or not isinstance(doc, ast.Expr):
+            continue
+        target = assignment.targets[0]
+        value = doc.value
+        if (
+            isinstance(target, ast.Name)
+            and isinstance(value, ast.Constant)
+            and target.id in dirsize.__all__
+            and isinstance(value.value, str)
+        ):
+            found.append(
+                doctest.DocTestParser().get_doctest(
+                    value.value, vars(dirsize).copy(), target.id, str(path), doc.lineno
+                )
+            )
     return [test for test in found if test.examples]
 
 
@@ -100,9 +121,9 @@ def test_every_public_name_and_method_has_an_example() -> None:
         methods = [m for m in vars(cls) if not m.startswith("_") and m not in data_fields]
         for method in methods:
             assert f"{cls.__name__}.{method}" in {t.name for t in _doctests()}, method
-    # The aliases are shown in the package docstring.
+    # Alias examples are checked by name, without changing their typing identity.
     for alias in ("ErrorKind", "Measure", "OnError"):
-        assert alias in (dirsize.__doc__ or "")
+        assert alias in names
 
 
 def test_the_readme_has_the_badge_and_absolute_links() -> None:

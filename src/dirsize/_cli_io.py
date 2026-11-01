@@ -10,9 +10,6 @@ from typing import TYPE_CHECKING, NoReturn, TextIO
 if TYPE_CHECKING:
     from _typeshed import SupportsWrite
 
-# Usage error messages are cut here, so a huge argument is never echoed back whole.
-MESSAGE_LIMIT = 300
-
 
 class LostOutput(Exception):
     """The reader of a stream went away (a closed pipe or a closed file)."""
@@ -89,8 +86,8 @@ class Parser(argparse.ArgumentParser):
     """An argument parser whose errors are bounded and survive a closed stream."""
 
     def error(self, message: str) -> NoReturn:
-        if len(message) > MESSAGE_LIMIT:
-            message = message[:MESSAGE_LIMIT] + "..."
+        # argparse embeds arbitrary values even in unknown-option and conflict errors.
+        message = "invalid arguments; use --help for accepted options"
         self.exit(2, f"{self.format_usage()}{self.prog}: error: {message}\n")
 
     def exit(self, status: int = 0, message: str | None = None) -> NoReturn:
@@ -108,3 +105,11 @@ class Parser(argparse.ArgumentParser):
             emit(sys.stdout, message, flush=True)
         except LostOutput:
             return
+
+
+def top_count(text: str) -> int:
+    """Parse a CLI count without echoing invalid input in argparse errors."""
+    try:
+        return int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError("--top must be an integer") from None

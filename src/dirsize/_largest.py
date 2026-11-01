@@ -69,6 +69,9 @@ def largest(
     second name of a hard-linked file weighs 0 unless ``count_links``. Other
     options mean what they mean in :func:`scan`; directories never include their
     own blocks here. ``n`` must be an ``int`` of zero or more.
+    A regular-file root with ``kind="dir"`` produces a synthetic ``DirUsage``
+    with its bytes, ``files=1``, ``dirs=0`` and ``depth=0``. With ``n=0``,
+    arguments are validated but the filesystem is not read.
 
     >>> import pathlib, tempfile
     >>> with tempfile.TemporaryDirectory() as tmp:

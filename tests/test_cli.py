@@ -160,7 +160,7 @@ def test_errors_go_to_stderr_and_exit_one(
     code, out = _run("-s", str(tmp_path), str(missing))
     assert code == 1
     assert [path for _, path in _lines(out)] == [str(tmp_path)]
-    assert capsys.readouterr().err.startswith(f"dirsize: {missing}: ")
+    assert capsys.readouterr().err.startswith("dirsize: missing filesystem error")
 
 
 def test_listing_errors_also_exit_one(tmp_path: Path) -> None:

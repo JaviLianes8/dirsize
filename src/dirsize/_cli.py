@@ -9,14 +9,14 @@ from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from typing import TextIO
 
-from ._cli_io import LostOutput, Parser, emit, finish, say
+from ._cli_io import LostOutput, Parser, emit, finish, say, top_count
 from ._core import measure
-from ._errors import ScanError
+from ._errors import diagnostic
 from ._human import human
 from ._largest import top_items
 from ._results import DirUsage
 from ._state import Seen
-from ._types import Measure, WalkOptions
+from ._types import Measure, WalkOptions, check_path
 from ._walk import walk
 
 
@@ -39,7 +39,7 @@ def _parser() -> argparse.ArgumentParser:
     add("-l", "--count-links", action="store_true", help="count hard-linked files every time")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("-s", "--summarize", action="store_true", help="one total per path")
-    mode.add_argument("--top", type=int, metavar="N", help="list the N largest files instead")
+    mode.add_argument("--top", type=top_count, metavar="N", help="list the N largest files instead")
     mode.add_argument("--json", action="store_true", help="print one JSON document")
     return parser
 
@@ -54,13 +54,16 @@ def main(argv: Sequence[str] | None = None, out: TextIO | None = None) -> int:
     args = parser.parse_args(argv)
     if args.top is not None and args.top < 0:
         parser.error("--top must be zero or more")
+    try:
+        args.paths = [check_path(path) for path in args.paths]
+    except (TypeError, ValueError):
+        parser.error("invalid path")
     failures = 0
 
     def report(error: OSError) -> None:
         nonlocal failures
         failures += 1
-        found = ScanError.from_os_error(error)
-        say(f"dirsize: {found.path}: {found.message}\n")
+        say(f"dirsize: {diagnostic(error)}\n")
 
     stdout = out or sys.stdout
     try:
@@ -86,6 +89,9 @@ def _run(args: argparse.Namespace, stdout: TextIO, report: Callable[[OSError], N
                 emit(stdout, f"{show(usage.size(by))}\t{path}\n")
         elif args.top is not None:
             items = walk(path, options, report, seen)
+            if args.top == 0:
+                for _ in items:
+                    pass
             for item in top_items(items, args.top, by, "file"):
                 emit(stdout, f"{show(item.size(by))}\t{item.path}\n")
         else:
