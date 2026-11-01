@@ -16,7 +16,7 @@ Progress:
 - [x] Docs: README, GUIDE, CHANGELOG (items 11, 12)
 - [x] Packaging, e2e and every Python (items 8, 10, 13, 14)
 - [x] Gates (item 15)
-- [ ] PR and trace guard CLEAN
+- [x] PR #3 open and trace guard CLEAN
 - [ ] Five QA lenses report PASS (item 19)
 - [ ] Independent reviewer reports PASS (item 16)
 
@@ -159,7 +159,7 @@ support linear traversal for these trees; they are not a universal performance b
 | 14 | PASS | Both archive listings inspected and assertions in the wheel test |
 | 15 | PASS | Each of the four gates exits 0 independently |
 | 16 | PENDING | Independent review is a separate stage |
-| 17 | PENDING | PR preparation only; merge and publication are separate stages |
+| 17 | READY | PR #3 open, trace guard CLEAN; merge and publication are separate stages |
 | 18 | PASS | All eighteen mutations caught, including the initial survivor after a new contract |
 | 19 | PENDING | No independent lens verdicts are recorded yet |
 
@@ -172,3 +172,6 @@ On 2026-11-01, each command exits 0 on its own: `ruff format --check .`,
 and `DIRSIZE_REFERENCES`. Temporary files, builds and pytest basetemp are outside
 the repository in a dedicated validation directory. Every test has a 300-second
 timeout. The 73 skips are the platform cases listed above; the wheel test runs.
+
+PR: https://github.com/JaviLianes8/dirsize/pull/3, from `release/1.0.0` to `main`.
+The preparation stage does not merge or publish. Items 16 and 19 remain pending.
