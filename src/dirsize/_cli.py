@@ -4,40 +4,26 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
-import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from typing import TextIO
 
-from ._core import largest, measure
-from ._types import DirUsage, FileUsage, Measure, ScanError, Usage, WalkOptions
-from ._walk import Seen, walk
-
-_UNITS = ("B", "K", "M", "G", "T", "P", "E")
-
-
-def human(size: int) -> str:
-    """Format ``size`` like ``du -h``: binary units, rounded up, one decimal below 10."""
-    if size < 1024:
-        return str(size)
-    value = size / 1024
-    for unit in _UNITS[1:]:
-        tenths = math.ceil(value * 10)
-        if tenths < 100:
-            return f"{tenths / 10:.1f}{unit}"
-        whole = math.ceil(value)
-        if whole < 1024 or unit == _UNITS[-1]:
-            return f"{whole}{unit}"
-        value /= 1024
-    raise AssertionError("unreachable")
+from ._cli_io import LostOutput, Parser, emit, finish, say
+from ._core import measure
+from ._errors import ScanError
+from ._human import human
+from ._largest import top_items
+from ._results import DirUsage
+from ._state import Seen
+from ._types import Measure, WalkOptions
+from ._walk import walk
 
 
 def _parser() -> argparse.ArgumentParser:
     from . import __version__
 
-    parser = argparse.ArgumentParser(
+    parser = Parser(
         prog="dirsize",
         add_help=False,
         description="Report the space used by directory trees, like du.",
@@ -59,52 +45,52 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None, out: TextIO | None = None) -> int:
-    """Run the command line and return its exit status: 0, or 1 if any path had errors."""
+    """Run the command line and return its exit status: 0, or 1 if anything failed.
+
+    Errors go to standard error as they happen. A closed output pipe ends the run
+    quietly with status 1.
+    """
     parser = _parser()
     args = parser.parse_args(argv)
     if args.top is not None and args.top < 0:
         parser.error("--top must be zero or more")
+    failures = 0
+
+    def report(error: OSError) -> None:
+        nonlocal failures
+        failures += 1
+        found = ScanError.from_os_error(error)
+        say(f"dirsize: {found.path}: {found.message}\n")
+
     stdout = out or sys.stdout
+    try:
+        _run(args, stdout, report)
+        emit(stdout, "", flush=True)
+    except LostOutput:
+        return finish(1)
+    return finish(1 if failures else 0)
+
+
+def _run(args: argparse.Namespace, stdout: TextIO, report: Callable[[OSError], None]) -> None:
     by: Measure = "apparent" if args.apparent_size else "disk"
     show = human if args.human_readable else str
     options = WalkOptions(args.dereference, args.one_file_system, args.count_links, True)
-    errors: list[ScanError] = []
     documents: list[dict[str, object]] = []
-    seen = Seen()  # one hard link or directory counts once across all paths, as in du
-
-    def collect(error: OSError) -> None:
-        errors.append(ScanError.from_os_error(error))
-
+    seen = Seen(track_all=len(args.paths) > 1)
     for path in args.paths:
         if args.json or args.summarize:
-            usage = measure(path, options, collect, seen)
+            usage = measure(path, options, report, seen)
             if args.json:
                 documents.append(asdict(usage))
             elif usage.measured:
-                print(f"{show(_pick(usage, by))}\t{path}", file=stdout)
+                emit(stdout, f"{show(usage.size(by))}\t{path}\n")
         elif args.top is not None:
-            found = largest(
-                path,
-                args.top,
-                by=by,
-                follow_symlinks=args.dereference,
-                one_filesystem=args.one_file_system,
-                count_links=args.count_links,
-                on_error=collect,
-            )
-            for item in found:
-                print(f"{show(_pick(item, by))}\t{item.path}", file=stdout)
+            items = walk(path, options, report, seen)
+            for item in top_items(items, args.top, by, "file"):
+                emit(stdout, f"{show(item.size(by))}\t{item.path}\n")
         else:
-            for item in walk(os.fspath(path), options, collect, seen):
+            for item in walk(path, options, report, seen):
                 if isinstance(item, DirUsage):
-                    print(f"{show(item.size(by))}\t{item.path}", file=stdout)
+                    emit(stdout, f"{show(item.size(by))}\t{item.path}\n")
     if args.json:
-        json.dump({"version": 1, "paths": documents}, stdout, indent=2)
-        stdout.write("\n")
-    for error in errors:
-        print(f"dirsize: {error.path}: {error.message}", file=sys.stderr)
-    return 1 if errors else 0
-
-
-def _pick(item: FileUsage | DirUsage | Usage, by: Measure) -> int:
-    return item.disk_bytes if by == "disk" else item.apparent_bytes
+        emit(stdout, json.dumps({"version": 1, "paths": documents}, indent=2) + "\n")

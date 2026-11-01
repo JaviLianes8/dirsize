@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from dirsize._cli import human
+from dirsize._human import human
 
 
 @pytest.mark.parametrize(
@@ -23,4 +23,5 @@ def test_human_format(size: int, text: str) -> None:
 
 
 def test_human_caps_at_the_largest_unit() -> None:
-    assert human(1 << 70).endswith("E")
+    assert human(1 << 70) == "1.0Z"
+    assert human(1 << 110) == "1024Q"

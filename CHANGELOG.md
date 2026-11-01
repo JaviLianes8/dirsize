@@ -6,6 +6,56 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-01
+
+First stable release and the first one published to PyPI. The public API is the twelve
+names of 0.2.0, now promised to stay compatible for the whole 1.x series: `scan`,
+`iter_dirs`, `largest`, `dir_size`, `file_count`, `Usage`, `DirUsage`, `FileUsage`,
+`ScanError`, `ErrorKind`, `Measure` and `OnError`, with the `dirsize` command and
+`python -m dirsize`. The counting rules, errors, command line and JSON document are
+described in GUIDE.md.
+
+### Added
+
+- `Usage.size(by)` and `FileUsage.size(by)`, as `DirUsage` already had.
+- `largest` is typed per `kind`: `list[FileUsage]` for files, `list[DirUsage]` for
+  directories.
+- Every public name and method has a docstring with an example that runs as a test,
+  and a GUIDE with the exact counting rules, platform details, errors and command line.
+- Results pickle under their public names (`dirsize.Usage`).
+- The package exports only its documented public names.
+
+### Changed
+
+- Arguments are checked at the call, before anything is read: a path that is not a
+  `str` or `os.PathLike[str]` (bytes included) raises `TypeError`, a path with a NUL
+  character `ValueError`; `largest` raises `TypeError` for an `n` that is not an `int`
+  (a `bool` included). Error messages quote at most 40 characters of a bad value.
+- `DirUsage.size` raises `ValueError` for an unknown `by` instead of returning the
+  apparent size.
+- `Usage.ok` is false when the path itself was not measured.
+- An unreadable subdirectory yields its own `DirUsage` with one error and its own
+  blocks (with `include_dirs`), and counts in its parent's `dirs`, as `du` lists it.
+- A symlink loop that Windows refuses to resolve is a `cycle` error, as ELOOP is on
+  POSIX.
+- `iter_dirs` returns a generator; closing it closes every open directory listing.
+- The command line prints each error as it happens, and `--top` shares hard links and
+  folders across its paths as the other modes do.
+
+### Fixed
+
+- Repeated file arguments to the CLI are skipped after their first measurement,
+  including files already reached through another root, matching repeated directory
+  arguments; `-l` counts file arguments every time.
+- `-h` rounded some sizes above 2**53 bytes down, because it used floating point; it
+  now follows `du -h` in exact integers (`1152921504606846977` bytes print as `1.1E`),
+  and sizes from 1024 EiB up use `Z`, `Y`, `R` and `Q` as `du` does.
+- The command line no longer fails with a traceback when its output pipe closes
+  (`dirsize | head`): it stops quietly with status 1. It prints file names the output
+  cannot encode as raw bytes on POSIX, as `du` does, or with backslash escapes, instead
+  of failing.
+- Usage error messages are cut at 300 characters.
+
 ## [0.2.0]
 
 ### Added
