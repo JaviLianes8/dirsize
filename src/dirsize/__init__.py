@@ -23,6 +23,8 @@ from ._largest import largest
 from ._results import DirUsage, FileUsage, Usage
 from ._types import ErrorKind, Measure, OnError
 
+del annotations
+
 __version__ = "1.0.0"
 
 # Pickles name a class by its module: point them at the public one, which never moves.

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from dirsize._cli import human
+from dirsize._human import human
 
 
 @pytest.mark.parametrize(

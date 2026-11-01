@@ -8,6 +8,7 @@ import importlib
 import io
 import re
 import tempfile
+from dataclasses import fields
 from pathlib import Path
 
 import pytest
@@ -95,7 +96,8 @@ def test_every_public_name_and_method_has_an_example() -> None:
         if callable(obj) and not hasattr(obj, "__origin__"):
             assert name in names, name
     for cls in PUBLIC_CLASSES:
-        methods = [m for m in vars(cls) if not m.startswith("_") and m not in cls.__match_args__]
+        data_fields = {field.name for field in fields(cls)}
+        methods = [m for m in vars(cls) if not m.startswith("_") and m not in data_fields]
         for method in methods:
             assert f"{cls.__name__}.{method}" in {t.name for t in _doctests()}, method
     # The aliases are shown in the package docstring.

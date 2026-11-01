@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-10-23
+## [1.0.0] - 2026-11-01
 
 First stable release and the first one published to PyPI. The public API is the twelve
 names of 0.2.0, now promised to stay compatible for the whole 1.x series: `scan`,
@@ -23,6 +23,7 @@ described in GUIDE.md.
 - Every public name and method has a docstring with an example that runs as a test,
   and a GUIDE with the exact counting rules, platform details, errors and command line.
 - Results pickle under their public names (`dirsize.Usage`).
+- The package exports only its documented public names.
 
 ### Changed
 

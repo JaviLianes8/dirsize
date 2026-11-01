@@ -102,4 +102,4 @@ def test_largest_rejects_bad_arguments(
     tmp_path: Path, kwargs: dict[str, object], match: str
 ) -> None:
     with pytest.raises(ValueError, match=match):
-        largest(tmp_path, **kwargs)  # type: ignore[arg-type]
+        largest(tmp_path, **kwargs)  # type: ignore[call-overload]

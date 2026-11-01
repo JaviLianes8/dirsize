@@ -17,13 +17,11 @@ summed over `os.walk`, gets several things wrong:
 - it adds `st_size`, not the space the file takes, so sparse and compressed files count
   at their full length;
 - on Windows, `os.walk` enters directory junctions by default. A junction that points at a
-  parent folder sends it round the loop until the path is too long: a test tree holding a
-  single 30-byte file was walked 128 folders deep and summed as 1,920 bytes (CPython
-  3.10.19, 3.13.2 and 3.14.2);
+  parent folder revisits the same contents;
 - with `followlinks=True` it can loop on symlinks too, as the `os.walk` documentation warns.
 
 GNU `du` gets these right, but it is a separate program whose output you have to parse,
-and it is not part of Windows. `dirsize` gives you the same rules as typed functions, on
+and it is not bundled with Windows. `dirsize` gives you similar rules as typed functions, on
 Linux and Windows, with no dependencies.
 
 ## Install
@@ -50,7 +48,7 @@ print(usage.disk_bytes >= 20000)  # True
 
 `apparent_bytes` is the sum of the file sizes, what `ls -l` shows. `disk_bytes` is the
 space the files take on the disk, which is larger for small files (space comes in
-blocks) and smaller for sparse or compressed ones. Errors never stop a scan: each one
+blocks) and smaller for sparse or compressed ones. By default, filesystem errors do not stop a scan: each one
 is kept in `usage.errors` as a `ScanError` with the path, a kind and the system message.
 
 ```python
