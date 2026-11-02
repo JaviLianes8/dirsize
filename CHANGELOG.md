@@ -28,8 +28,9 @@ described in GUIDE.md.
   boundaries in `largest`, callback typing, Windows error classification and native
   handle cleanup, bare error messages, escaped CLI output and immediate error flushing.
 - Exception pickle contracts cover false-valued and underscore-prefixed attributes,
-  notes, list/set/tuple values and types, and shared dictionary identity across all
-  five public path-taking calls and every supported pickle protocol.
+  notes, list/set/tuple/bytes/bytearray/frozenset/float values and exact types, and
+  shared dictionary/list/set identity across all five public path-taking calls and
+  every supported pickle protocol.
 - Regular-file roots in `iter_dirs` and `largest(kind="dir")` are documented and
   tested as synthetic `DirUsage` totals with one file and depth zero.
 - Results pickle under their public names (`dirsize.Usage`).

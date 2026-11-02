@@ -74,7 +74,11 @@ def test_pickle_preserves_exception_notes(
     assert type(restored.__notes__) is list
 
 
-@pytest.mark.parametrize("value", [[1, 2], {1, 2}, (1, 2)], ids=["list", "set", "tuple"])
+@pytest.mark.parametrize(
+    "value",
+    [[1, 2], {1, 2}, (1, 2), b"binary\xff", bytearray(b"mutable\xff"), frozenset({1, 2}), 1.75],
+    ids=["list", "set", "tuple", "bytes", "bytearray", "frozenset", "float"],
+)
 def test_pickle_preserves_exception_container_values_and_types(
     value: object, call: Callable[..., object], protocol: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -97,5 +101,20 @@ def test_pickle_preserves_shared_exception_dictionaries(
     assert native.first is native.second
     safe = _raised(original, call, monkeypatch)
     restored = pickle.loads(pickle.dumps(safe, protocol=protocol))
+    assert restored.first == restored.second == native.first == shared
+    assert restored.first is restored.second
+
+
+@pytest.mark.parametrize("shared", [[1, 2, 3], {1, 2, 3}], ids=["list", "set"])
+def test_pickle_preserves_shared_exception_lists_and_sets(
+    shared: object, call: Callable[..., object], protocol: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = OSError(errno.EIO, "attached state")
+    original.__dict__.update(first=shared, second=shared)
+    native = pickle.loads(pickle.dumps(original, protocol=protocol))
+    assert native.first is native.second
+    safe = _raised(original, call, monkeypatch)
+    restored = pickle.loads(pickle.dumps(safe, protocol=protocol))
+    assert type(restored.first) is type(native.first) is type(shared)
     assert restored.first == restored.second == native.first == shared
     assert restored.first is restored.second
