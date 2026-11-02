@@ -55,7 +55,10 @@ class WalkOptions:
 
 def check_path(path: object) -> str:
     """Return ``path`` as text; bytes paths and other objects raise ``TypeError``."""
-    name = os.fspath(path) if isinstance(path, os.PathLike) else path
+    try:
+        name = os.fspath(path) if isinstance(path, os.PathLike) else path
+    except TypeError:
+        raise TypeError("path must be a str or os.PathLike[str]") from None
     if not isinstance(name, str):
         raise TypeError("path must be a str or os.PathLike[str]")
     name = str.__str__(name)

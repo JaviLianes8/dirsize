@@ -56,6 +56,14 @@ described in GUIDE.md.
 
 ### Fixed
 
+- Raised filesystem errors retain their original `args` and support pickle
+  round-trips and process-pool propagation with the exception family, metadata and
+  redacted diagnostics preserved.
+- Malformed `PathLike` conversions now produce a fixed `TypeError` diagnostic
+  without exposing caller-controlled type names or the original exception context.
+- Regression contracts cover complete CLI `--top 0` traversal, invalid CLI paths,
+  inclusive Windows UTF-16 boundaries and unpaired surrogates, private argument
+  diagnostics, redacted repr and tracebacks, and explicit exception metadata.
 - `scan` and CLI JSON report `measured=False` with zero totals when a root's
   directory listing cannot be opened, preserving its error record. CLI summaries
   omit these unmeasured roots, as they already do for missing roots.

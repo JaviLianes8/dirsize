@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import errno
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
+from importlib import import_module
 
 from ._types import ErrorHandler, ErrorKind, OnError
 
@@ -58,17 +60,63 @@ def cycle_error(path: str) -> OSError:
 
 
 def _raise(error: OSError) -> None:
+    safe = _restore_error(type(error), error.args, error.__dict__, _metadata(error))
+    raise safe from None
+
+
+def _metadata(error: OSError) -> dict[str, object]:
+    return {
+        name: getattr(error, name)
+        for name in ("errno", "strerror", "filename", "filename2", "winerror")
+        if hasattr(error, name)
+    }
+
+
+def _restore_error(
+    family: type[OSError],
+    args: tuple[object, ...],
+    attributes: dict[str, object],
+    metadata: dict[str, object],
+) -> OSError:
     # Retain the exception family and explicit metadata without printing input paths.
     kind = type(
-        type(error).__name__, (type(error),), {"__str__": diagnostic, "__repr__": diagnostic}
+        family.__name__,
+        (family,),
+        {"__str__": diagnostic, "__repr__": diagnostic, "__reduce__": _reduce_error},
     )
     safe: OSError = OSError.__new__(kind)
-    OSError.__init__(safe, *error.args)
-    safe.__dict__.update(error.__dict__)
-    for name in ("errno", "strerror", "filename", "filename2", "winerror"):
-        if hasattr(error, name):
-            setattr(safe, name, getattr(error, name))
-    raise safe from None
+    safe.args = args
+    safe.__dict__.update(attributes)
+    for name, value in metadata.items():
+        setattr(safe, name, value)
+    return safe
+
+
+def _reduce_error(error: OSError) -> tuple[Callable[..., OSError], tuple[object, ...]]:
+    # Names avoid old pickle protocols mapping newer OSError families to OSError.
+    family = type(error).__bases__[0]
+    return _unpickle_error, (
+        family.__module__,
+        family.__qualname__,
+        error.args,
+        error.__dict__,
+        _metadata(error),
+    )
+
+
+def _unpickle_error(
+    module: str,
+    qualname: str,
+    args: tuple[object, ...],
+    attributes: dict[str, object],
+    metadata: dict[str, object],
+) -> OSError:
+    family: object = import_module(module)
+    for name in qualname.split("."):
+        family = getattr(family, name)
+    if not isinstance(family, type) or not issubclass(family, OSError):
+        raise TypeError("expected an OSError family")
+    return _restore_error(family, args, attributes, metadata)
 
 
 def diagnostic(error: OSError) -> str:

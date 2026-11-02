@@ -18,6 +18,7 @@ Progress:
 - [x] Gates (item 15)
 - [x] PR #3 open and trace guard CLEAN
 - [x] QA round 1 findings corrected and regression contracts added
+- [x] QA round 2 findings corrected and all eleven surviving mutations caught
 - [ ] Five QA lenses report PASS (item 19)
 - [ ] Independent reviewer reports PASS (item 16)
 
@@ -236,6 +237,74 @@ reference cases. No new interpreter matrix or independent QA verdict is claimed.
 All pytest runs use a 300-second per-test timeout and basetemp below
 `C:/lianes8-build/codex-pylib/scratch/dirsize-cert/fix-r1/`; logs and mutation
 results are retained there. No device-file fixtures were used.
+
+### Disputed findings
+
+None.
+
+## QA lenses: round 2 fixes (2026-11-02)
+
+Reviewed base: `8c8a1e4b1ca359585fcc3bb4079b3ad6291fc7b0`, branch `release/1.0.0`.
+Fix commit subject: `fix qa round two exception transport and contracts`.
+All 16 findings are addressed below. Independent lens rechecks remain pending;
+this fix round does not replace their verdicts or mark item 19 as passed.
+
+The three new contract modules were added before implementation. The first run
+against the reviewed base had **54 failures and 51 passes**, reproducing missing
+exception arguments, failed pickle/process-pool transport and malformed PathLike
+diagnostic disclosure. All **105 cases pass** after the fixes. The public API
+names, signatures and defaults are unchanged. GUIDE and CHANGELOG describe the
+updated exception transport and path-conversion diagnostic behavior.
+
+| Finding | Change and verification |
+| --- | --- |
+| A-004, B-03, C-06 | A module-level pickle reconstruction function restores the original exception family, args, native metadata, attached attributes and redacted str/repr. Six error cases round-trip with protocols 0 through 5, including repeated serialization. A real missing-file control and a spawned process pool preserve FileNotFoundError. Family names are transported explicitly so old protocols cannot remap them to OSError. |
+| C-05 | Restore args explicitly instead of relying on the no-op OSError initializer; six synthetic error cases and a native missing-file comparison retain their original arguments. |
+| C-07 | Normalize TypeError from path conversion to a fixed diagnostic and suppress its original context. All five public calls reject malformed return values without exposing caller-controlled type names in formatted tracebacks. |
+| E11 | CLI --top 0 consumes a real file entry followed by a synthetic listing error, closes the listing, prints no rows, reports the error and exits 1. |
+| E12 | NUL and overlong CLI paths fail with bounded private usage diagnostics and exit 2 in all four output modes. |
+| E13 | Pin 32766, 32767 and 32768 UTF-16 units with ASCII and supplementary characters; equality is admitted without consuming iter_dirs. |
+| E14 | Both high and low unpaired surrogates pass eager validation and reach the normal filesystem error callback. |
+| E15 | Bytes, None and hostile repr objects fail path validation with bounded diagnostics that omit supplied values. |
+| E16 | Invalid string and hostile repr counts fail with bounded private diagnostics. |
+| E17 | Raised error str and repr retain the exact category and redaction notice for all six synthetic cases. |
+| E18 | Complete formatted tracebacks omit the original sensitive filesystem exception context. |
+| E19 | Two-path exceptions retain both filename and filename2, including after serialization. |
+| E20 | Raised errors retain strerror independently of their redacted display. |
+| E21 | Attached detail metadata survives raising and serialization. |
+
+The eleven surviving lens-e mutations were reapplied individually in a scratch
+copy. Every mutation produced an assertion failure and exit 1; clean baselines
+before and after restoration passed all 105 cases. N20 and N26 were adapted to
+the new reconstruction helper while retaining the reported semantic changes.
+These findings required regression contracts, with no production behavior change.
+
+| Finding / mutation | Detecting test in tests/test_contract_*.py |
+| --- | --- |
+| E11 / N06 | `cli_traversal.py::test_cli_top_zero_reports_error_after_first_file` |
+| E12 / N07 | `cli_traversal.py::test_cli_invalid_paths_have_bounded_usage_errors` |
+| E13 / N13 | `input_privacy.py::test_windows_utf16_boundary_is_inclusive` |
+| E14 / N14 | `input_privacy.py::test_windows_surrogate_path_reaches_error_policy` |
+| E15 / N15 | `input_privacy.py::test_malformed_pathlike_diagnostics_are_private` |
+| E16 / N16 | `input_privacy.py::test_invalid_counts_have_bounded_private_diagnostics` |
+| E17 / N20 | `exception_transport.py::test_raised_error_display_and_traceback_are_redacted` |
+| E18 / N21 | `exception_transport.py::test_raised_error_display_and_traceback_are_redacted` |
+| E19 / N22 | `exception_transport.py::test_raised_errors_keep_explicit_metadata[filename2]` |
+| E20 / N23 | `exception_transport.py::test_raised_errors_keep_explicit_metadata[strerror]` |
+| E21 / N26 | `exception_transport.py::test_raised_errors_keep_explicit_metadata[detail]` |
+
+Gates on CPython 3.14.6: `ruff format --check .`, `ruff check .`,
+`mypy --strict src` and `mypy --strict src tests` each exit 0. The complete pytest
+run exits 0 with **313 passed, 79 skipped**, including the installed-wheel build,
+clean installation and CLI consumer enabled by `DIRSIZE_E2E=1`. Skips are the same
+12 symlink privilege cases, one POSIX sparse-file case, 60 POSIX GNU-du cases and
+six optional external reference cases as round 1. No new interpreter matrix or
+independent QA verdict is claimed.
+
+All pytest runs use a 300-second per-test timeout and a basetemp below
+`C:/lianes8-build/codex-pylib/scratch/dirsize-cert/fix-r2-20261102/`.
+The failing baseline log, mutation runner, exact edits, detecting test names and
+per-mutation logs are retained there. No device-file fixtures were used.
 
 ### Disputed findings
 

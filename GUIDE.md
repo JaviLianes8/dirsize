@@ -92,6 +92,9 @@ A path holding a NUL character raises `ValueError` too. On Windows, paths exceed
 call. Shorter paths can still exceed filesystem limits; those failures follow
 `on_error`. String subclasses are normalized to plain text before validation.
 Argument error messages describe accepted arguments without quoting supplied values.
+`TypeError` from `PathLike` conversion uses the same fixed path-type diagnostic,
+with the original context suppressed in formatted tracebacks. Other exceptions
+raised by a path conversion hook propagate unchanged.
 
 Problems met while reading the tree are `OSError`s, handled by `on_error`:
 `"ignore"` (the default of `scan`, `iter_dirs` and `largest`) goes on, `"raise"` (the
@@ -112,9 +115,11 @@ own size and one error, as `du` counts it. `scan` of a root whose listing cannot
 opened instead returns zero totals and `measured=False`, keeping the error record.
 
 Raised filesystem errors retain their exception family (for example, they can be
-caught as `FileNotFoundError`) and metadata such as `errno`, `winerror`, `filename`
-and `filename2`. Their `str` and `repr` contain only the error kind and a redaction
-notice. Callback errors and `ScanError` records retain the original diagnostic
+caught as `FileNotFoundError`) and metadata such as `args`, `errno`, `strerror`,
+`winerror`, `filename`, `filename2` and attached attributes. Pickle round-trips and
+process-pool propagation preserve this family and metadata. Their `str` and `repr`
+contain only the error kind and a redaction notice, including after unpickling.
+Callback errors and `ScanError` records retain the original diagnostic
 data; their explicit path and message fields can contain sensitive input.
 
 ```python
