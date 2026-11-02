@@ -21,6 +21,7 @@ Progress:
 - [x] QA round 2 findings corrected and all eleven surviving mutations caught
 - [x] QA round 3 recursive exception state fixed and all three surviving mutations caught
 - [x] QA round 4 exception attribute contracts added and all seven surviving mutations caught
+- [x] QA round 5 exception value and alias contracts added and all six surviving mutations caught
 - [ ] Five QA lenses report PASS (item 19)
 - [ ] Independent reviewer reports PASS (item 16)
 
@@ -416,6 +417,53 @@ Temporary directories and pip cache are also below that scratch directory.
 The mutation runner, exact mutation definitions, per-mutation logs and JUnit
 results are retained there or in the referenced lens-e round 4 report directory.
 No device-file fixtures were used.
+
+### Disputed findings
+
+None.
+
+## QA lenses: round 5 fixes (2026-11-02)
+
+Reviewed base: `e566b2d97ad3ae9523ee6f81243193b29f3961cc`, branch `release/1.0.0`.
+Fix commit: `367235759a3c3973a3e75c2b7b54b96995029089`
+(`strengthen exception value and alias serialization contracts`).
+All six findings are addressed. Independent lens rechecks remain pending;
+this round does not replace their verdicts or mark item 19 as passed.
+
+These are missing regression contracts, not behavior bugs in the reviewed code.
+The extended `tests/test_contract_exception_attributes.py` passes all **600 cases**
+on unchanged production code, including **180 added cases**. Hand-written values
+exercise all five public path-taking calls and pickle protocols 0 through 5,
+with native OSError round-trips as controls. API and runtime behavior are unchanged.
+CHANGELOG records the additional coverage.
+
+| Finding / mutation | Contract and verification |
+| --- | --- |
+| E32 / N05 | `test_pickle_preserves_shared_exception_lists_and_sets[list]` asserts two attached lists retain shared identity, exact type and contents. |
+| E33 / N06 | `test_pickle_preserves_shared_exception_lists_and_sets[set]` asserts two attached sets retain shared identity, exact type and elements. |
+| E34 / N07 | `test_pickle_preserves_exception_container_values_and_types[bytes]` asserts exact bytes and type, including a non-UTF-8 byte. |
+| E35 / N08 | `test_pickle_preserves_exception_container_values_and_types[bytearray]` asserts exact bytearray type and contents, including a non-UTF-8 byte. |
+| E36 / N09 | `test_pickle_preserves_exception_container_values_and_types[frozenset]` asserts exact frozenset type and elements. |
+| E37 / N10 | `test_pickle_preserves_exception_container_values_and_types[float]` asserts exact float type and fractional value 1.75. |
+
+The six exact reported mutations were applied individually in a separate scratch
+copy. Each produces **30 assertion failures and 570 passes**, with exit 1 and no
+collection or setup errors. Original source bytes are restored after every run.
+The clean module exits 0; these discriminators close all six reported survivors.
+
+Gates on CPython 3.14.6: `ruff format --check .`, `ruff check .`,
+`mypy --strict src` and `mypy --strict src tests` each exit 0. The complete pytest
+run exits 0 with **970 passed, 79 skipped**, including the installed-wheel build,
+clean installation and CLI consumer enabled by `DIRSIZE_E2E=1`. The skips cover
+12 symlink privilege cases, one POSIX sparse-file case, 60 POSIX GNU-du cases and
+six optional external reference cases. No new interpreter matrix or independent
+QA verdict is claimed.
+
+Every pytest run uses a 300-second per-test timeout and dedicated basetemp paths
+below `C:/lianes8-build/codex-pylib/scratch/dirsize-cert/fix-r5-20261102/`.
+Temporary directories and pip cache also remain below that scratch directory.
+The validation script, exact applied mutations, per-mutation logs and JUnit results
+are retained there. No device-file fixtures were used.
 
 ### Disputed findings
 
