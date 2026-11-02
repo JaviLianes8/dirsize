@@ -56,6 +56,8 @@ described in GUIDE.md.
 
 ### Fixed
 
+- Pickle preserves attached filesystem exception attributes that refer back to
+  the exception, including recursive identity and unrelated attached values.
 - Raised filesystem errors retain their original `args` and support pickle
   round-trips and process-pool propagation with the exception family, metadata and
   redacted diagnostics preserved.

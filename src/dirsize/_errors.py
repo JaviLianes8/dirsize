@@ -92,15 +92,22 @@ def _restore_error(
     return safe
 
 
-def _reduce_error(error: OSError) -> tuple[Callable[..., OSError], tuple[object, ...]]:
+def _reduce_error(
+    error: OSError,
+) -> tuple[Callable[..., OSError], tuple[object, ...], dict[str, object]]:
     # Names avoid old pickle protocols mapping newer OSError families to OSError.
     family = type(error).__bases__[0]
-    return _unpickle_error, (
-        family.__module__,
-        family.__qualname__,
-        error.args,
+    # Deferred state restores back-references after pickle memoizes the exception.
+    return (
+        _unpickle_error,
+        (
+            family.__module__,
+            family.__qualname__,
+            error.args,
+            {},
+            _metadata(error),
+        ),
         error.__dict__,
-        _metadata(error),
     )
 
 

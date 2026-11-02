@@ -19,6 +19,7 @@ Progress:
 - [x] PR #3 open and trace guard CLEAN
 - [x] QA round 1 findings corrected and regression contracts added
 - [x] QA round 2 findings corrected and all eleven surviving mutations caught
+- [x] QA round 3 recursive exception state fixed and all three surviving mutations caught
 - [ ] Five QA lenses report PASS (item 19)
 - [ ] Independent reviewer reports PASS (item 16)
 
@@ -306,6 +307,53 @@ All pytest runs use a 300-second per-test timeout and a basetemp below
 `C:/lianes8-build/codex-pylib/scratch/dirsize-cert/fix-r2-20261102/`.
 The failing baseline log, mutation runner, exact edits, detecting test names and
 per-mutation logs are retained there. No device-file fixtures were used.
+
+### Disputed findings
+
+None.
+
+## QA lenses: round 3 fixes (2026-11-02)
+
+Reviewed base: `37363d593a2b3bed04031197ed997882a121c469`, branch `release/1.0.0`.
+Fix commit: `fix qa round three exception state and contracts` (this commit).
+All six findings are addressed. Independent lens rechecks remain pending; this
+round does not replace their verdicts or mark item 19 as passed.
+
+The new contracts ran before the implementation change: **30 failed, 67 passed**.
+The failures reproduce recursive attribute loss for all five public path-taking
+calls under pickle protocols 0 through 5, with native FileNotFoundError controls.
+After the fix, the focused exception-state, transport and input-privacy contracts
+pass all **153 cases**. Public names, signatures and defaults are unchanged.
+
+| Finding | Change and verification |
+| --- | --- |
+| A-005, B-04, C-08 | Move attached attributes into the reduction tuple's deferred state, applied after exception memoization. Native controls and real missing-path exceptions retain direct and dictionary back-references, an unrelated tag, args, filename, errno and redacted diagnostics. The reconstruction function retains its existing arguments for earlier serialized errors. CHANGELOG records the behavior fix. |
+| E22 | Across all five calls, RuntimeError, ValueError and OSError raised by a PathLike hook propagate as the identical exception object. This closes a contract gap without changing production path conversion. |
+| E23 | An importable module-level custom OSError family survives protocols 0 through 5, preserving metadata, attached values and safe diagnostics. A native pickle control verifies the fixture is serializable. |
+| E24 | A nested custom OSError family with the same short name as a different module-level class retains its actual family through protocols 0 through 5. Native controls and metadata assertions distinguish the qualified name from the short name. |
+
+The three surviving mutations were reapplied individually in an isolated scratch
+copy. Each fails with exit 1; original source bytes are restored after each run.
+E22, E23 and E24 were missing contracts, not failures in the unmodified code.
+
+| Finding / mutation | Detecting contract | Result |
+| --- | --- | --- |
+| E22 / S02 | `test_non_typeerror_pathlike_failure_propagates_unchanged` | 15 failures |
+| E23 / S16 | `test_pickle_preserves_importable_exception_family` | 12 failures |
+| E24 / S17 | `test_pickle_preserves_importable_exception_family` | 6 nested-family failures; 6 module-level cases pass |
+
+Gates on CPython 3.14.6: `ruff format --check .`, `ruff check .`,
+`mypy --strict src` and `mypy --strict src tests` each exit 0. The complete pytest
+run exits 0 with **370 passed, 79 skipped**, including the installed-wheel build,
+clean installation and CLI consumer enabled by `DIRSIZE_E2E=1`. The skips cover
+12 symlink privilege cases, one POSIX sparse-file case, 60 POSIX GNU-du cases and
+six optional external reference cases. No new interpreter matrix or independent
+QA verdict is claimed.
+
+All pytest runs use a 300-second per-test timeout and dedicated basetemp paths
+below `C:/lianes8-build/codex-pylib/scratch/dirsize-cert/fix-r3-20261102/`.
+The failing baseline, mutation script, exact edits and per-mutation logs are
+retained there. No device-file fixtures were used.
 
 ### Disputed findings
 

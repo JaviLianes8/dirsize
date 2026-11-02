@@ -20,6 +20,22 @@ class Hostile:
 
 
 @pytest.mark.parametrize("call", CALLS)
+@pytest.mark.parametrize("family", [RuntimeError, ValueError, OSError])
+def test_non_typeerror_pathlike_failure_propagates_unchanged(
+    call: Callable[..., object], family: type[Exception]
+) -> None:
+    original = family("path conversion failed")
+
+    class BrokenPath:
+        def __fspath__(self) -> str:
+            raise original
+
+    with pytest.raises(family) as caught:
+        call(BrokenPath())
+    assert caught.value is original
+
+
+@pytest.mark.parametrize("call", CALLS)
 @pytest.mark.parametrize("result", [None, 123, b"private"], ids=["none", "int", "bytes"])
 def test_malformed_pathlike_diagnostics_are_private(
     call: Callable[..., object], result: object
