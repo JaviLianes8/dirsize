@@ -315,7 +315,8 @@ None.
 ## QA lenses: round 3 fixes (2026-11-02)
 
 Reviewed base: `37363d593a2b3bed04031197ed997882a121c469`, branch `release/1.0.0`.
-Fix commit: `fix qa round three exception state and contracts` (this commit).
+Fix commit: `487bbbbf098c6283d8f9204259de40106fd25032`
+(`fix qa round three exception state and contracts`).
 All six findings are addressed. Independent lens rechecks remain pending; this
 round does not replace their verdicts or mark item 19 as passed.
 
