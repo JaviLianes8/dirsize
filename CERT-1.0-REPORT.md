@@ -20,6 +20,7 @@ Progress:
 - [x] QA round 1 findings corrected and regression contracts added
 - [x] QA round 2 findings corrected and all eleven surviving mutations caught
 - [x] QA round 3 recursive exception state fixed and all three surviving mutations caught
+- [x] QA round 4 exception attribute contracts added and all seven surviving mutations caught
 - [ ] Five QA lenses report PASS (item 19)
 - [ ] Independent reviewer reports PASS (item 16)
 
@@ -355,6 +356,66 @@ All pytest runs use a 300-second per-test timeout and dedicated basetemp paths
 below `C:/lianes8-build/codex-pylib/scratch/dirsize-cert/fix-r3-20261102/`.
 The failing baseline, mutation script, exact edits and per-mutation logs are
 retained there. No device-file fixtures were used.
+
+### Disputed findings
+
+None.
+
+## QA lenses: round 4 fixes (2026-11-02)
+
+Reviewed base: `ac5fb57f06da2c46cc582a78a02d9bae41ef3816`, branch `release/1.0.0`.
+Fix commit: `bb785bd52a1559dfa55ae2bf1b8f1c52873210dd`
+(`strengthen exception attribute serialization contracts`).
+All seven findings are addressed. Independent lens rechecks remain pending;
+this round does not replace their verdicts or mark item 19 as passed.
+
+These findings identify missing regression contracts, not behavior bugs in the
+reviewed implementation. The new module, `tests/test_contract_exception_attributes.py`,
+passes all **420 cases** on unchanged production code. It exercises all five public
+path-taking calls under pickle protocols 0 through 5 and compares restored state
+with native OSError pickle controls. Exception notes use `add_note` on Python 3.11
+and newer; those cases skip on Python 3.10. API and runtime behavior are unchanged.
+CHANGELOG records the additional coverage.
+
+| Finding / mutation | Contract and verification |
+| --- | --- |
+| E25 / R03 | `test_pickle_preserves_false_valued_exception_attributes` checks attribute presence, value and exact type for zero, False, empty string, None and empty list/dict/set/tuple values. |
+| E26 / R04 | `test_pickle_preserves_private_exception_attributes` checks an underscore-prefixed custom attribute. |
+| E27 / R05 | `test_pickle_preserves_exception_notes` checks two notes, their order and their list type. |
+| E28 / R06 | `test_pickle_preserves_exception_container_values_and_types[list]` checks nonempty list values and exact type. |
+| E29 / R07 | `test_pickle_preserves_exception_container_values_and_types[set]` checks nonempty set values and exact type. |
+| E30 / R08 | `test_pickle_preserves_exception_container_values_and_types[tuple]` checks nonempty tuple values and exact type. |
+| E31 / R13 | `test_pickle_preserves_shared_exception_dictionaries` checks equal values and shared identity with `is` for two attached dictionaries. |
+
+The seven exact reported mutations were applied individually in a separate scratch
+copy. The new contract module fails each one with exit 1 and no collection or setup
+errors; original source bytes are restored after each run. The failure counts
+include overlapping discriminators, such as notes also catching list conversion.
+
+| Mutation | Failing cases |
+| --- | --- |
+| R03 | 240 |
+| R04 | 60 |
+| R05 | 30 |
+| R06 | 90 |
+| R07 | 60 |
+| R08 | 60 |
+| R13 | 30 |
+
+Gates on CPython 3.14.6: `ruff format --check .`, `ruff check .`,
+`mypy --strict src` and `mypy --strict src tests` each exit 0. The complete pytest
+run exits 0 with **790 passed, 79 skipped**, including the installed-wheel build,
+clean installation and CLI consumer enabled by `DIRSIZE_E2E=1`. The skips cover
+12 symlink privilege cases, one POSIX sparse-file case, 60 POSIX GNU-du cases and
+six optional external reference cases. No new interpreter matrix or independent
+QA verdict is claimed.
+
+Every pytest run uses a 300-second per-test timeout and dedicated basetemp paths
+below `C:/lianes8-build/codex-pylib/scratch/dirsize-cert/fix-r4-20261102/`.
+Temporary directories and pip cache are also below that scratch directory.
+The mutation runner, exact mutation definitions, per-mutation logs and JUnit
+results are retained there or in the referenced lens-e round 4 report directory.
+No device-file fixtures were used.
 
 ### Disputed findings
 
