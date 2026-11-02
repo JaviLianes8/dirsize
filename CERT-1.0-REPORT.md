@@ -245,7 +245,8 @@ None.
 ## QA lenses: round 2 fixes (2026-11-02)
 
 Reviewed base: `8c8a1e4b1ca359585fcc3bb4079b3ad6291fc7b0`, branch `release/1.0.0`.
-Fix commit subject: `fix qa round two exception transport and contracts`.
+Fix commit: `23e1e786502b8a34f0d0c23f286da9d2d634bc37`
+(`fix qa round two exception transport and contracts`).
 All 16 findings are addressed below. Independent lens rechecks remain pending;
 this fix round does not replace their verdicts or mark item 19 as passed.
 
